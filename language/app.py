@@ -7,6 +7,7 @@ import deepl
 deepl_api = ""
 translator = deepl.Translator(deepl_api)
 
+
 with gr.Blocks() as demo:
     def get_deepl_language_code(current_language: str = None) -> str:
         """
@@ -70,12 +71,60 @@ with gr.Blocks() as demo:
                                                               "type": None}}}
         file_ops.write_file(new_word=new_word_dict)
 
-    def quiz(word_list_name: str):
+    def quiz(word_list_name: str) -> tuple[str,str]:
+        """
+    Description:
+        Generates a quiz question and answer based on the specified word list.
+    Args:
+        word_list_name (str): The name of the word list to generate the quiz from.
+    Returns:
+        Tuple[str, str]: A tuple containing the quiz question and its corresponding answer.
+    """
         quiz = Quiz(filepath=word_lists_info[word_list_name])
         test_word, answer = quiz.random_word()
-        print(test_word)
-        print(answer)
+        if "german" in word_list_name.lower():
+            question = f"Welche Bedeutung hat das Wort: {next(iter(test_word))}"
+        elif "spanish" in word_list_name.lower():
+            question = f"¿Cuál es el significado de la palabra: {next(iter(test_word))}"
+        else:
+            question = f"What is the meaning of the word: {next(iter(test_word))}"
+        return question, answer
 
+    def quiz_with_answer(word_list_name: str=None):
+        """
+        Description:
+            This generates a list of responses appropriate for the chatbot object
+        Args:
+            word_list_name (str): The name of the word list to generate the quiz from.
+
+        Returns:
+            list: A list where the first item is null representing the user's history, the 
+                  second item is the question to ask the user (bot response)
+        """
+        if word_list_name != None:
+            question, answer = quiz(word_list_name)
+            quiz_with_answer.answer = answer
+        return [["",question]]
+
+    def check_answer(user_message: str, history: list):
+        """
+        Description:
+            This checks the answer passed in by the user. It is formatted for the chatbox object
+        Args:
+            user_message (str): A string that the user has typed in
+            history (_type_): The previous chatbot history
+
+        Returns:
+            list: The updated history to display in the chatbot. Includes user's response and bot's answer
+        """
+        updated_history = history + [[user_message, None]]
+        if user_message in quiz_with_answer.answer:
+            bot_response = "Correct! 🤗"
+        else:
+            bot_response = "Try again 🥶"
+        updated_history[-1][1] = bot_response
+        return updated_history     
+    
     def get_word_list_paths(word_list_folder_name: str = "word_lists") -> str:
         """
         Description:
@@ -99,10 +148,12 @@ with gr.Blocks() as demo:
                     word_list_paths[word_list_name] = (full_path)
         return word_list_paths
     
+    
     word_lists_info = get_word_list_paths()
     drop_down_choices = []
     for key in word_lists_info:
         drop_down_choices.append(key)
+        
     ################## UI Definitions
     # Initialize Gradio components
     with gr.Tab("Word Entry"):
@@ -118,9 +169,11 @@ with gr.Blocks() as demo:
             gr.Textbox(visible=False, scale=3)
     with gr.Tab("Quiz"):
         with gr.Row():
-            saved_word_lists = gr.Dropdown(label="Saved Word Lists", show_label=True, choices=drop_down_choices)
-            quiz_question = gr.Textbox(label="Quiz Question", interactive=False)
-            quiz_button = gr.Button("Next Question", scale=2)  # Create a button component to clear the text box
+            with gr.Column():
+                saved_word_lists = gr.Dropdown(label="Saved Word Lists", show_label=True, choices=drop_down_choices)
+                quiz_button = gr.Button("Next Question", scale=0.5)  # Create a button component to clear the text box
+            quiz_question = gr.Chatbot(label="Quiz Question", interactive=True, scale=2)
+            
         with gr.Row():
             quiz_answer = gr.Textbox(label="Quiz Answer")  # Create a chatbot component
             quiz_check_button = gr.Button("Submit Answer")
@@ -135,8 +188,12 @@ with gr.Blocks() as demo:
     word_entry.submit(fn=create_new_word, 
                       inputs=[word_entry ,saved_word_lists, target_language, native_language], 
                       outputs=None)
-    quiz_button.click(fn=quiz, inputs=saved_word_lists, outputs=quiz_question)
+
+    quiz_button.click(fn=quiz_with_answer, inputs=saved_word_lists, outputs=quiz_question)
+    quiz_check_button.click(fn=check_answer, inputs=[quiz_answer,quiz_question], outputs=quiz_question).then(fn=lambda: '', outputs=quiz_answer)
     
+
     
 if __name__ == "__main__":
+    
     demo.launch()
