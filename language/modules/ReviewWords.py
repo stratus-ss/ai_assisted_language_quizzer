@@ -11,7 +11,9 @@ class Quiz(HandleFileOperations):
         # We don't want to ask the same question twice... how do we prevent this?
         # Mutate the dict?
         first_key = list(self.word_dict.keys())[0]
-        random_word_index = random.randrange(1, (len(self.word_dict[first_key])))
+        random_word_index = 1
+        if len((self.word_dict[first_key])) > 1:
+            random_word_index = random.randrange(1, (len(self.word_dict[first_key])))
         counter = 1
         for word in self.word_dict[first_key]:
             if counter == random_word_index:
