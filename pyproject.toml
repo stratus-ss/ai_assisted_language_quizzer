@@ -9,6 +9,8 @@ readme = "README.md"
 python = "^3.11"
 deepl = "^1.16"
 gradio = "^3.50"
+soundfile = "^0.12.1"
+contractions = "^0.1.73"
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
