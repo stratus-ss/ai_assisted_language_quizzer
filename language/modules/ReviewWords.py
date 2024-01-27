@@ -8,23 +8,29 @@ class Quiz(HandleFileOperations):
         self.word_dict = self.read_file()
     
     def random_word(self):
-        # We don't want to ask the same question twice... how do we prevent this?
-        # Mutate the dict?
+        """
+        Description:
+            Returns a random word from the word dictionary along with its correct answer, audio path, and image path.
+
+        Args:
+            self: The instance of the ReviewWords class.
+
+        Returns:
+            A tuple containing the random word without its meaning, the correct answer, the audio path, and the image path.
+        """
         first_key = list(self.word_dict.keys())[0]
-        random_word_index = 1
-        if len((self.word_dict[first_key])) > 1:
-            random_word_index = random.randrange(1, (len(self.word_dict[first_key])))
-        counter = 1
-        for word in self.word_dict[first_key]:
-            if counter == random_word_index:
-                random_word_without_meaning = {word: self.word_dict[first_key][word]}
-                correct_answer = self.word_dict[first_key][word]['meaning']
-                random_word_without_meaning[word]['meaning'] = ''
-                return(random_word_without_meaning, correct_answer)
-            else:
-                counter +=1
-    
-    
+        if len(self.word_dict[first_key]) > 1:
+            random_word_key = random.choice(list(self.word_dict[first_key].keys()))
+        else:
+            random_word_key = next(iter(self.word_dict[first_key]))
+        random_word_details = self.word_dict[first_key][random_word_key]
+        random_word_without_meaning = {random_word_key: random_word_details}
+        correct_answer = random_word_details['meaning']
+        # We want to blank out the meaning so that it is not displayed by the chatbot
+        random_word_without_meaning[random_word_key]['meaning'] = ''
+        audio_path = random_word_details['audio']
+        image_path = random_word_details['image']
+        return(random_word_without_meaning, correct_answer, audio_path, image_path)
 class Review:
     def __init__(self) -> None:
         pass
