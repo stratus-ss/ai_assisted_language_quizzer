@@ -10,6 +10,8 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 import gradio as gr
 import deepl
+import soundfile
+import contractions
 
 from modules.FileHandling import HandleFileOperations, GenerateAudio
 from modules.ReviewWords import Quiz
@@ -26,6 +28,8 @@ with gr.Blocks() as demo:
     session_id = gr.State('')
     drop_down_choices = []
     all_languages_list = gr.State([])
+    path_to_audio_file = gr.State('')
+    path_to_image_file = gr.State('')
     # language_to_quiz = gr.State('')
     
     def create_new_word(new_word: str, session_id: gr.State, current_language: str, 
@@ -82,7 +86,11 @@ with gr.Blocks() as demo:
             list: The updated history to display in the chatbot. Includes user's response and bot's answer
         """
         updated_history = history + [[user_message, None]]
-        if user_message in quiz_with_answer.answer:
+        user_answer = contractions.fix(user_message).lower()
+        correct_answer = contractions.fix(quiz_with_answer.answer.lower())
+        print(user_answer)
+        print(correct_answer)
+        if user_answer in correct_answer:
             bot_response = "Correct! 🤗"
         else:
             bot_response = "Try again 🥶"
@@ -164,30 +172,33 @@ with gr.Blocks() as demo:
         Tuple[str, str]: A tuple containing the quiz question and its corresponding answer.
     """
         quiz = Quiz(filepath=return_file_path(session_id=session_id['gsession_id'], language_directory=language))
-        test_word, answer = quiz.random_word()
+        test_word, answer, audio_path, image_path = quiz.random_word()
         if "german" in word_list_name.lower():
             question = f"Welche Bedeutung hat das Wort: {next(iter(test_word))}"
         elif "spanish" in word_list_name.lower():
             question = f"¿Cuál es el significado de la palabra: {next(iter(test_word))}"
         else:
             question = f"What is the meaning of the word: {next(iter(test_word))}"
-        return question, answer
+        return question, answer, audio_path, image_path
 
     def quiz_with_answer(word_list_name: str=None, session_id: gr.State=None, language: str=None):
         """
         Description:
-            This generates a list of responses appropriate for the chatbot object
+            Generates a quiz question with its corresponding answer, audio path, and image path based on the specified word list name, session ID, and language.
+
         Args:
-            word_list_name (str): The name of the word list to generate the quiz from.
+            word_list_name: The name of the word list to generate the quiz from.
+            session_id: The ID of the session.
+            language: The language to use for the quiz.
 
         Returns:
-            list: A list where the first item is null representing the user's history, the 
-                  second item is the question to ask the user (bot response)
+            A list containing the quiz question, audio path, and image path.
         """
         if word_list_name != None:
-            question, answer = quiz(word_list_name, session_id=session_id, language=language )
+            question, answer, audio_path, image_path = quiz(word_list_name, session_id=session_id, language=language )
+            image_path = "" if image_path is None else image_path
             quiz_with_answer.answer = answer
-        return [["",question]]
+        return [[["",question]], audio_path, image_path]
 
     def return_file_path( session_id: str, language_directory: str, word_list_folder_name: str = "word_lists") -> str:
         """
@@ -244,7 +255,22 @@ with gr.Blocks() as demo:
                         drop_down_choices.append(language)
         return gr.Dropdown(label="Saved Word Lists", show_label=True, choices=drop_down_choices)
 
+    def play_audio(file_name: gr.State):
+        """
+        Description:
+            Plays the audio file specified by the file name and returns the sample rate and data.
+
+        Args:
+            file_name: The name of the audio file to be played.
+
+        Returns:
+            A tuple containing the sample rate and data of the audio file.
+        """
+        data, samplerate = soundfile.read(file_name)
+        return(samplerate, data)        
     
+    def unhide_audio():
+        return gr.Audio(scale = 0.25, visible=True)
         
     ################## UI Definitions
     # Initialize Gradio components
@@ -257,7 +283,6 @@ with gr.Blocks() as demo:
             add_audio = gr.Checkbox(label="Generate Audio")
             word_entry = gr.Textbox(label="Enter New Word Dict", scale=3)  # Create a text box component for user input   
             create_word = gr.Button("Create Word Entry", scale=0.5)
-            test_btn = gr.Button("Test", scale=0.5)
         with gr.Row():
             native_language = gr.Radio(label="Native language", choices=["English"], scale=0.2, value="English")
             gr.Textbox(visible=False, scale=3)
@@ -265,42 +290,45 @@ with gr.Blocks() as demo:
         with gr.Row():
             with gr.Column():
                 quiz_language = gr.Radio(label="Quiz language", choices=["German", "Spanish"], scale=0.5)
-                saved_word_lists_dropdown = gr.Dropdown(label="Saved Word Lists", show_label=True, choices=drop_down_choices)
                 quiz_button = gr.Button("Next Question", scale=0.5)  # Create a button component to clear the text box
-            quiz_question = gr.Chatbot(label="Quiz Question", scale=2)
-            
+                audio_player = gr.Audio(scale = 0.25, visible=False)
+            quiz_question = gr.Chatbot(label="Quiz Question", scale=2.5)
         with gr.Row():
             quiz_answer = gr.Textbox(label="Quiz Answer")  # Create a chatbot component
-            quiz_check_button = gr.Button("Submit Answer")
+            submit_answer_btn = gr.Button("Submit Answer")
     #
     ################ End UI
     
     ################ Event Handlers
     #
-    test_btn.click(fn=get_cookies, inputs=saved_word_lists_dropdown, outputs=session_id).then(
-            fn=return_word_list, inputs=[saved_word_lists_dropdown, session_id], outputs=all_languages_list
-            ).then(
-                fn=populate_drop_down, inputs=all_languages_list, outputs=saved_word_lists_dropdown
-                )
-    saved_word_lists_dropdown.focus(fn=get_cookies, inputs=saved_word_lists_dropdown, outputs=session_id).then(
-            fn=return_word_list, inputs=[saved_word_lists_dropdown, session_id, quiz_language], outputs=all_languages_list
-            ).then(
-                fn=populate_drop_down, inputs=all_languages_list, outputs=saved_word_lists_dropdown
-                )
-
-    saved_word_lists_dropdown.change(fn=load_word_list, inputs=[saved_word_lists_dropdown, session_id, all_languages_list], outputs=None)
-
-    create_word.click(fn=get_cookies, inputs=saved_word_lists_dropdown, outputs=session_id).then(fn=create_new_word, 
-                      inputs=[word_entry ,session_id, target_language, native_language, add_audio], 
-                      outputs=None)
-    word_entry.submit(fn=get_cookies, inputs=saved_word_lists_dropdown, outputs=session_id).then(fn=create_new_word, 
-                      inputs=[word_entry ,session_id, target_language, native_language, add_audio], 
-                      outputs=None)
-
-    quiz_button.click(fn=quiz_with_answer, inputs=[saved_word_lists_dropdown, session_id, quiz_language], outputs=quiz_question)
-    quiz_check_button.click(fn=check_answer, inputs=[quiz_answer,quiz_question], outputs=quiz_question).then(fn=lambda: '', outputs=quiz_answer)
     
+    ### Tab 1 Handlers
+    
+    
+    create_word.click(fn=get_cookies, outputs=session_id).then(fn=create_new_word, 
+                      inputs=[word_entry ,session_id, target_language, native_language, add_audio], 
+                      outputs=None)
+    word_entry.submit(fn=get_cookies, outputs=session_id).then(fn=create_new_word, 
+                      inputs=[word_entry ,session_id, target_language, native_language, add_audio], 
+                      outputs=None)
 
+    # create_word.click(fn=get_cookies, inputs=saved_word_lists_dropdown, outputs=session_id).then(fn=create_new_word, 
+    #                   inputs=[word_entry ,session_id, target_language, native_language, add_audio], 
+    #                   outputs=None)
+    # word_entry.submit(fn=get_cookies, inputs=saved_word_lists_dropdown, outputs=session_id).then(fn=create_new_word, 
+    #                   inputs=[word_entry ,session_id, target_language, native_language, add_audio], 
+    #                   outputs=None)
+
+    ### Tab 2 Handlers
+    quiz_language.select(fn=get_cookies, inputs=quiz_language, outputs=session_id).then(
+            fn=return_word_list, inputs=[quiz_language, session_id, quiz_language], outputs=all_languages_list
+            )
+    quiz_button.click(fn=quiz_with_answer, inputs=[quiz_language, session_id, quiz_language], 
+                      outputs=[quiz_question, path_to_audio_file, path_to_image_file ]).then(fn=unhide_audio, outputs=audio_player).then(
+                      fn=play_audio, inputs=path_to_audio_file ,outputs=audio_player    
+                      )
+    submit_answer_btn.click(fn=check_answer, inputs=[quiz_answer,quiz_question], outputs=quiz_question).then(fn=lambda: '', outputs=quiz_answer)
+    quiz_answer.submit(fn=check_answer, inputs=[quiz_answer,quiz_question], outputs=quiz_question).then(fn=lambda: '', outputs=quiz_answer)
     
 demo.queue()
 CUSTOM_PATH = "/gradio"
