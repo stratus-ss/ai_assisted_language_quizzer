@@ -11,6 +11,7 @@ deepl = "^1.16"
 gradio = "^3.50"
 soundfile = "^0.12.1"
 contractions = "^0.1.73"
+python-dotenv = "^1.0.1"
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"

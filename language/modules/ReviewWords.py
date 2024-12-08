@@ -1,12 +1,12 @@
 from .FileHandling import HandleFileOperations
 import random
-import yaml
+
 
 class Quiz(HandleFileOperations):
     def __init__(self, filepath: str = None) -> None:
         self.file_path = filepath
         self.word_dict = self.read_file()
-    
+
     def random_word(self):
         """
         Description:
@@ -25,13 +25,14 @@ class Quiz(HandleFileOperations):
             random_word_key = next(iter(self.word_dict[first_key]))
         random_word_details = self.word_dict[first_key][random_word_key]
         random_word_without_meaning = {random_word_key: random_word_details}
-        correct_answer = random_word_details['meaning']
+        correct_answer = random_word_details["meaning"]
         # We want to blank out the meaning so that it is not displayed by the chatbot
-        random_word_without_meaning[random_word_key]['meaning'] = ''
-        audio_path = random_word_details['audio']
-        image_path = random_word_details['image']
-        return(random_word_without_meaning, correct_answer, audio_path, image_path)
+        random_word_without_meaning[random_word_key]["meaning"] = ""
+        audio_path = random_word_details["audio"]
+        image_path = random_word_details["image"]
+        return (random_word_without_meaning, correct_answer, audio_path, image_path)
+
+
 class Review:
     def __init__(self) -> None:
         pass
-
