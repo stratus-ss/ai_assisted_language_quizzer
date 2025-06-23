@@ -78,7 +78,8 @@ with gr.Blocks() as demo:
         if generate_audio:
             audio_ops = GenerateAudio()
             audio_path = audio_ops.request_audio_generation(
-                word_language=language_code, sentence=translated_word
+                word_language=language_code,
+                sentence=HandleFileOperations.remove_special_chars(translated_word),
             )
         if generate_image:
             # call the generate image, should return file path..

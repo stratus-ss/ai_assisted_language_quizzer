@@ -6,6 +6,9 @@ import requests
 import string
 from dotenv import load_dotenv
 import os
+import unicodedata
+import re
+
 
 load_dotenv()
 
@@ -18,6 +21,21 @@ class HandleFileOperations:
         # {<word or phrase>: {<meaning>: <val>, <image path>: <val>, <audio path>: <val>, <grammar type>: <val>}}
         self.required_keys = ["meaning", "image", "audio", "type"]
         self.file_path = filepath
+
+    @staticmethod
+    def remove_special_chars(input_string):
+        # Normalize the string and remove accents
+        normalized = unicodedata.normalize("NFD", input_string)
+
+        # Remove non-Latin characters and non-spacing marks
+        cleaned = "".join(
+            c for c in normalized if c.isascii() and not unicodedata.combining(c)
+        )
+
+        # Remove special characters like @#$%^&*()
+        cleaned = re.sub(r"[^\w\s]", "", cleaned)
+        cleaned = cleaned.replace(" ", "_")
+        return cleaned
 
     def write_file(self, new_word: dict = None):
         """
@@ -74,7 +92,8 @@ class HandleFileOperations:
 
 class GenerateAudio:
     def __init__(self) -> None:
-        self.all_talk_url = os.getenv("ALL_TALK_URL")
+        self.all_talk_base_url = os.getenv("ALL_TALK_URL")
+        self.all_talk_url = self.all_talk_base_url + "/api/tts-generate"
 
     def request_audio_generation(
         self, word_language: str, sentence: str, audio_backend_url: str = None
@@ -121,7 +140,7 @@ class GenerateAudio:
             "autoplay_volume": "0.8",
         }
         response = requests.post(audio_backend_url, data=data)
-        file_url = self.parse_audio_url(response)
+        file_url = self.all_talk_base_url + self.parse_audio_url(response)
         if not file_url:
             print("Problem with parsing the URL from All Talk")
             return
@@ -146,7 +165,13 @@ class GenerateAudio:
             print("Problem parsing response from AllTalk Server")
             return None
 
-    def retrieve_audio_file(self, file_url: str, language_code: str, filename: str):
+    def retrieve_audio_file(
+        self,
+        file_url: str,
+        language_code: str,
+        filename: str,
+        file_output_location: str = "",
+    ):
         """
         Description:
             Retrieves an audio file from the specified URL and saves it locally.
@@ -161,6 +186,8 @@ class GenerateAudio:
         """
         response = requests.get(file_url)
         file_output_location = f"./language/audio/{language_code}/{filename}.wav"
+        if file_output_location:
+            file_output_location = f"{file_output_location}/{filename}.wav"
         if response.status_code == 200:
             with open(file_output_location, "wb") as file:
                 file.write(response.content)
