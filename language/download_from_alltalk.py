@@ -23,7 +23,7 @@ def remove_special_chars(input_string):
 
 class GenerateAudio:
     def __init__(self) -> None:
-        self.all_talk_base_url = "http://ask-gpt.example.com:7851"
+        self.all_talk_base_url = "http://containers-gpu.example.com:7851"
         self.all_talk_url = self.all_talk_base_url + "/api/tts-generate"
 
     def request_audio_generation(
@@ -72,13 +72,13 @@ class GenerateAudio:
             "narrator_voice_gen": "male_01.wav",
             "text_not_inside": "character",
             "language": word_language,
-            "output_file_name": file_name,
-            "output_file_timestamp": "false",
-            "autoplay": "true",
+            "output_file_name": f"{file_name}",
+            "output_file_timestamp": "true",
+            "autoplay": "false",
             "autoplay_volume": "0.8",
         }
         response = requests.post(audio_backend_url, data=data)
-        file_url = self.all_talk_base_url + self.parse_audio_url(response)
+        file_url = self.parse_audio_url(response)
         print(file_url)
         if not file_url:
             print("Problem with parsing the URL from All Talk")
@@ -99,7 +99,6 @@ class GenerateAudio:
             The audio URL extracted from the response, or None if it cannot be parsed.
         """
         try:
-
             return response.json()["output_file_url"]
         except KeyError:
             print("Problem parsing response from AllTalk Server")
