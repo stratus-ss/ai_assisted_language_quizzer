@@ -1,0 +1,14 @@
+# Dependencies for audio generation and Anki integration scripts
+# Install with: pip install -r requirements.txt
+
+# Required for both download_from_alltalk.py and add_audio_to_anki.py
+requests>=2.31.0
+
+# Optional: If you want to use the full application (language/app.py)
+# deepl>=1.16
+# gradio>=3.50
+# soundfile>=0.12.1
+# contractions>=0.1.73
+# python-dotenv>=1.0.1
+# pyyaml>=6.0
+# fastapi>=0.104.0

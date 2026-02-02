@@ -98,6 +98,23 @@ The application will start on `http://localhost:8002`.
 - Uses DeepL for translating words and phrases
 - Supports automatic language detection and translation
 
+### 5. Audio Generation & Anki Integration
+
+**Install dependencies:**
+```bash
+pip install -r requirements.txt
+```
+
+**Generate audio files:**
+```bash
+python3 language/download_from_alltalk.py -w words.txt -l es -v female_03-female_07
+```
+
+**Add audio to Anki cards:**
+```bash
+python3 language/add_audio_to_anki.py -a audio_dir -w words.txt -d "Deck Name"
+```
+
 ## Contributing
 
 Contributions are welcome! Please feel free to submit pull requests.
