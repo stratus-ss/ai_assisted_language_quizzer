@@ -1,11 +1,15 @@
 import re
 import os
+from pathlib import Path
 import deepl
 
 # This file takes in a text export of anki notes with ALL fields exported
 # it then grabs the 4th column and gets a translation from deepl.
 # Finally it adds the tranlated word to the note and writes the deck back
 
+# Input files directory
+SCRIPT_DIR = Path(__file__).parent
+INPUT_DIR = SCRIPT_DIR / "input"
 
 deepl_api = os.getenv("DEEPL_API_KEY")
 translator = deepl.Translator(deepl_api)
@@ -55,7 +59,7 @@ def process_file(file_path, target_lang, source_lang=None):
 
 
 # Example usage
-file_path = "spanish_short.txt"
+file_path = INPUT_DIR / "spanish_short.txt"  # Now looks in input/ directory
 target_language = "DE"  # German
 source_language = "ES"  # Spanish
 
