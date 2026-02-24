@@ -1,0 +1,31 @@
+German:
+  Frosch:
+    audio: null
+    image: null
+    meaning: frog
+    type: null
+  Haus:
+    audio: null
+    image: null
+    meaning: house
+    type: null
+  Hund:
+    audio: null
+    image: null
+    meaning: dog
+    type: null
+  katze:
+    audio: None
+    image: None
+    meaning: cat
+    type: noun
+  wort:
+    audio: null
+    image: null
+    meaning: word
+    type: noun
+  worte:
+    audio: null
+    image: null
+    meaning: word
+    type: noun
