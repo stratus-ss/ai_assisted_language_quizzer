@@ -14,16 +14,28 @@ An AI-powered language learning tool for extracting vocabulary from subtitles, t
 
 ```
 language/
-├── input/                          # Input files (word lists)
-├── output/                         # Generated reports and translations
-├── subtitle_analyzer/              # Word frequency analysis module
-│   ├── config.yaml                 # Configuration
-│   └── stopwords_spanish.txt       # Words to filter
+├── scripts/                        # CLI tools
+│   ├── subtitle_word_frequency.py  # Main frequency analyzer
+│   ├── translate_wordlist.py       # Translation script
+│   └── clean_subtitles.py          # Subtitle cleaner
+├── anki_tools/                     # Anki integration
+│   ├── add_audio_to_anki.py        # Add audio to cards
+│   └── add_words_to_anki_notes.py  # Add translations to notes
+├── audio/                          # Audio generation
+│   └── download_from_alltalk.py    # Download audio files
+├── core/                           # Core modules
+│   ├── subtitle_analyzer/          # Frequency analysis module
+│   │   ├── config.yaml             # Configuration
+│   │   └── stopwords_spanish.txt   # Words to filter
+│   └── modules/                    # Shared utilities
+├── data/                           # Data files
+│   ├── input/                      # Word lists
+│   ├── output/                     # Generated reports
+│   ├── word_lists/                 # Organized vocabularies
+│   └── images/                     # Image assets
 ├── venv/                           # Virtual environment
-├── subtitle_word_frequency.py      # Main frequency analyzer
-├── translate_wordlist.py           # Translation script
-├── add_audio_to_anki.py           # Add audio to Anki cards
-└── add_words_to_anki_notes.py     # Add translations to notes
+├── app.py                          # Main GUI application
+└── .env                            # Environment variables
 ```
 
 **Subtitles Directory:**
@@ -59,16 +71,20 @@ Get a free DeepL API key: https://www.deepl.com/pro-api (500,000 characters/mont
 ### 3. Complete Workflow
 
 ```bash
-# Step 1: Extract vocabulary from subtitles
-python subtitle_word_frequency.py
+# All-in-one: Extract vocabulary and translate
+python scripts/subtitle_word_frequency.py --translate
 
-# Step 2: Translate words to English
-python translate_wordlist.py \
-  -i output/anki_import_words.txt \
-  -o output/translated_words.txt
+# Or step-by-step:
+# Step 1: Extract vocabulary from subtitles
+python scripts/subtitle_word_frequency.py
+
+# Step 2: Translate words to English  
+python scripts/translate_wordlist.py \
+  -i data/output/anki_import_words.txt \
+  -o data/output/translated_words.txt
 
 # Step 3: Import to Anki (use Anki UI)
-# File → Import → translated_words.txt
+# File → Import → data/output/translated_words.txt
 # Field separator: Tab
 # Field 1 → Front, Field 2 → Back
 ```
@@ -81,30 +97,45 @@ python translate_wordlist.py \
 
 ```bash
 cd language
-python subtitle_word_frequency.py
+python scripts/subtitle_word_frequency.py
 ```
 
 **Output:**
-- `output/anki_import_words.txt` - Words sorted by frequency
-- `output/word_frequency_report.csv` - Detailed frequency data
-- `output/word_frequency_summary.md` - Human-readable report
+- `data/output/anki_import_words.txt` - Words sorted by frequency
+- `data/output/word_frequency_report.csv` - Detailed frequency data
+- `data/output/word_frequency_summary.md` - Human-readable report
+
+**All-in-one command (analyze + translate):**
+```bash
+# Extract and translate in one step
+python scripts/subtitle_word_frequency.py --translate
+
+# Translate to different language (e.g., German)
+python scripts/subtitle_word_frequency.py --translate --target-lang DE
+
+# Specify source language explicitly
+python scripts/subtitle_word_frequency.py --translate --source-lang ES --target-lang EN-US
+```
 
 **Customize stopwords:**
 ```bash
 # Add words to ignore (character names, etc.)
-python subtitle_word_frequency.py --add-stopwords "vin,elfo,lucy"
+python scripts/subtitle_word_frequency.py --add-stopwords "vin,elfo,lucy"
 
 # Remove words from stopwords
-python subtitle_word_frequency.py --remove-stopwords "importante"
+python scripts/subtitle_word_frequency.py --remove-stopwords "importante"
 
 # List current stopwords
-python subtitle_word_frequency.py --list-stopwords
+python scripts/subtitle_word_frequency.py --list-stopwords
 ```
 
-**Configuration:** Edit `subtitle_analyzer/config.yaml`
+**Configuration:** Edit `core/subtitle_analyzer/config.yaml`
 - `target_words`: Number of words in final list (default: 500)
 - `min_word_length`: Minimum word length (default: 2)
 - `threshold_mode`: "auto" or "manual" frequency filtering
+- `translation.enabled`: Auto-translate after analysis (default: false)
+- `translation.source_lang`: Source language (default: ES)
+- `translation.target_lang`: Target language (default: EN-US)
 
 ### Word Translation
 
@@ -114,12 +145,12 @@ python subtitle_word_frequency.py --list-stopwords
 source venv/bin/activate
 
 # Spanish to English (default)
-python translate_wordlist.py \
-  -i output/anki_import_words.txt \
-  -o output/translated_words.txt
+python scripts/translate_wordlist.py \
+  -i data/output/anki_import_words.txt \
+  -o data/output/translated_words.txt
 
 # Check API usage
-python translate_wordlist.py --check-usage
+python scripts/translate_wordlist.py --check-usage
 ```
 
 **Output formats:**
@@ -136,7 +167,7 @@ python translate_wordlist.py --check-usage
 **Import translated words to Anki:**
 
 1. Open Anki → File → Import
-2. Select `output/translated_words.txt`
+2. Select `data/output/translated_words.txt`
 3. Configure:
    - Type: **Basic**
    - Field separator: **Tab**
@@ -147,9 +178,9 @@ python translate_wordlist.py --check-usage
 **Add audio to Anki cards (optional):**
 
 ```bash
-python add_audio_to_anki.py \
+python anki_tools/add_audio_to_anki.py \
   -a ./audio_directory \
-  -w output/anki_import_words.txt \
+  -w data/output/anki_import_words.txt \
   -d "Your Deck Name" \
   --search-field "Front" \
   --audio-field "Front"
@@ -164,8 +195,8 @@ python add_audio_to_anki.py \
 **Generate pronunciation audio:**
 
 ```bash
-python download_from_alltalk.py \
-  -w input/spanish_words.txt \
+python audio/download_from_alltalk.py \
+  -w data/input/spanish_words.txt \
   -l es \
   -v female_03-female_07
 ```
@@ -192,7 +223,7 @@ The analyzer uses smart thresholds based on dataset size:
 **Manual control:**
 ```bash
 # Only words appearing 10+ times
-python subtitle_word_frequency.py --min-freq 10
+python scripts/subtitle_word_frequency.py --min-freq 10
 ```
 
 ### API Usage Management
@@ -207,7 +238,7 @@ python subtitle_word_frequency.py --min-freq 10
 **Process multiple subtitle files:**
 ```bash
 # Place all .srt files in subtitles/ directory
-python subtitle_word_frequency.py
+python scripts/subtitle_word_frequency.py
 
 # Analyzer processes all files automatically
 # Results are combined and sorted by frequency
@@ -216,12 +247,12 @@ python subtitle_word_frequency.py
 **Import in stages:**
 ```bash
 # Top 100 words
-head -100 output/anki_import_words.txt > batch1.txt
-python translate_wordlist.py -i batch1.txt -o translated_batch1.txt
+head -100 data/output/anki_import_words.txt > batch1.txt
+python scripts/translate_wordlist.py -i batch1.txt -o translated_batch1.txt
 
 # Next 100 words
-head -200 output/anki_import_words.txt | tail -100 > batch2.txt
-python translate_wordlist.py -i batch2.txt -o translated_batch2.txt
+head -200 data/output/anki_import_words.txt | tail -100 > batch2.txt
+python scripts/translate_wordlist.py -i batch2.txt -o translated_batch2.txt
 ```
 
 ## Troubleshooting
@@ -248,8 +279,8 @@ pip install deepl python-dotenv pyyaml
 
 ## Documentation
 
-- `subtitle_analyzer/README.md` - Detailed frequency analyzer documentation
-- `subtitle_analyzer/config.yaml` - Configuration options with comments
+- `core/subtitle_analyzer/README.md` - Detailed frequency analyzer documentation
+- `core/subtitle_analyzer/config.yaml` - Configuration options with comments
 - `--help` flag on any script for usage information
 
 ## Contributing
