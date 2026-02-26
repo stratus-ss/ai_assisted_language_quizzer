@@ -12,6 +12,7 @@ This script reads a word list and adds corresponding audio files to Anki notes.
 import json
 import requests
 import os
+import re
 import argparse
 from pathlib import Path
 from typing import List, Dict, Optional
@@ -140,7 +141,7 @@ class AudioAttacher:
     
     def __init__(
         self, 
-        audio_directory: str,
+        audio_directory: Optional[str],
         anki_connector: AnkiConnector,
         deck_name: Optional[str] = None
     ):
@@ -148,11 +149,11 @@ class AudioAttacher:
         Initialize AudioAttacher.
         
         Args:
-            audio_directory: Directory containing audio files
+            audio_directory: Directory containing audio files (optional for missing-audio mode)
             anki_connector: AnkiConnector instance
             deck_name: Optional deck name to limit search
         """
-        self.audio_dir = Path(audio_directory)
+        self.audio_dir = Path(audio_directory) if audio_directory else None
         self.anki = anki_connector
         self.deck_name = deck_name
     
@@ -254,6 +255,60 @@ class AudioAttacher:
         
         return success_count > 0
     
+    def find_notes_missing_audio(
+        self,
+        audio_field: str = "Audio",
+        search_field: str = "Front"
+    ) -> List[str]:
+        """
+        Find all words in the deck that don't have audio files.
+        
+        Args:
+            audio_field: Name of the field that should contain audio
+            search_field: Field containing the word
+            
+        Returns:
+            List of words missing audio
+        """
+        # Build search query
+        if self.deck_name:
+            query = f'deck:"{self.deck_name}"'
+        else:
+            query = "*"
+        
+        # Find all notes
+        note_ids = self.anki.find_notes(query)
+        if not note_ids:
+            print("⚠️  No notes found in the specified deck")
+            return []
+        
+        print(f"Found {len(note_ids)} notes in deck")
+        
+        # Get note information
+        notes_info = self.anki.notes_info(note_ids)
+        
+        # Find notes missing audio
+        missing_audio = []
+        for note in notes_info:
+            if search_field not in note["fields"]:
+                continue
+            
+            # Get the word from search field (may contain audio tags too)
+            field_value = note["fields"][search_field]["value"]
+            
+            # Check if audio is missing (no [sound: tag present)
+            has_audio = "[sound:" in field_value
+            
+            if not has_audio:
+                # Extract the word (strip HTML tags)
+                word = field_value.replace("<br>", " ").replace("<div>", " ").replace("</div>", " ")
+                word = re.sub(r'<[^>]+>', '', word).strip()
+                
+                if word:
+                    missing_audio.append(word)
+        
+        return missing_audio
+    
     def process_word_list(
         self, 
         word_list_file: str,
@@ -311,6 +366,12 @@ Examples:
   
   # Search all decks
   %(prog)s -a ./audio -w words.txt
+  
+  # Find words missing audio in a deck
+  %(prog)s --missing-audio -d "LingQ es 3810112" --search-field "Front" --audio-field "Front"
+  
+  # Save missing words to file for use with other scripts
+  %(prog)s --missing-audio -d "Subtitle_High_Frequency" --search-field "Front" -o missing_words.txt
 
 Prerequisites:
   1. Install AnkiConnect add-on in Anki (Code: 2055492159)
@@ -320,13 +381,13 @@ Prerequisites:
     
     parser.add_argument(
         "-a", "--audio-dir",
-        required=True,
+        default=None,
         help="Directory containing audio files"
     )
     
     parser.add_argument(
         "-w", "--word-list",
-        required=True,
+        default=None,
         help="Text file with words to process (one per line)"
     )
     
@@ -338,13 +399,13 @@ Prerequisites:
     
     parser.add_argument(
         "--audio-field",
-        default="term",
+        default="Front",
         help="Field name where audio should be added (default: term)"
     )
     
     parser.add_argument(
         "--search-field",
-        default="term",
+        default="Front",
         help="Field name containing the word to search for (default: term)"
     )
     
@@ -354,13 +415,93 @@ Prerequisites:
         help="AnkiConnect API URL (default: http://localhost:8765)"
     )
     
-    return parser.parse_args()
+    parser.add_argument(
+        "--missing-audio",
+        action="store_true",
+        help="Find and list words in the deck that are missing audio files"
+    )
+    
+    parser.add_argument(
+        "-o", "--output-file",
+        default=None,
+        help="Output file to save missing words list (only used with --missing-audio)"
+    )
+    
+    args = parser.parse_args()
+    
+    # Validate required arguments based on mode
+    if not args.missing_audio:
+        if not args.audio_dir:
+            parser.error("--audio-dir is required when not using --missing-audio")
+        if not args.word_list:
+            parser.error("--word-list is required when not using --missing-audio")
+    
+    return args
 
 
 def main():
     """Main execution function."""
     args = parse_arguments()
     
+    # Check if Anki is running
+    try:
+        anki = AnkiConnector(url=args.anki_url)
+        version = anki.invoke("version")
+        print(f"✓ Connected to AnkiConnect (version: {version})")
+    except Exception as e:
+        print(f"❌ Error: {e}")
+        print("\nMake sure:")
+        print("1. Anki is running")
+        print("2. AnkiConnect add-on is installed (Code: 2055492159)")
+        return 1
+    
+    # Handle missing-audio mode
+    if args.missing_audio:
+        print("=" * 60)
+        print("Find Words Missing Audio")
+        print("=" * 60)
+        print(f"Deck: {args.deck or 'All decks'}")
+        print(f"Audio field: {args.audio_field}")
+        print(f"Search field: {args.search_field}")
+        print("=" * 60)
+        
+        attacher = AudioAttacher(
+            audio_directory=None,
+            anki_connector=anki,
+            deck_name=args.deck
+        )
+        
+        missing_words = attacher.find_notes_missing_audio(
+            audio_field=args.audio_field,
+            search_field=args.search_field
+        )
+        
+        print("\n" + "=" * 60)
+        print("WORDS MISSING AUDIO")
+        print("=" * 60)
+        if missing_words:
+            unique_words = sorted(set(missing_words))
+            
+            # Save to file if specified
+            if args.output_file:
+                output_path = Path(args.output_file)
+                with open(output_path, 'w', encoding='utf-8') as f:
+                    for word in unique_words:
+                        f.write(word + '\n')
+                print(f"✓ Saved {len(unique_words)} words to: {output_path}\n")
+            
+            # Print to screen
+            for word in unique_words:
+                print(word)
+            print("=" * 60)
+            print(f"Total: {len(unique_words)} words missing audio")
+        else:
+            print("✓ All notes have audio!")
+        print("=" * 60)
+        
+        return 0
+    
+    # Normal mode - add audio to notes
     # Validate paths
     audio_dir = Path(args.audio_dir)
     if not audio_dir.exists():
@@ -381,18 +522,6 @@ def main():
     print(f"Audio field: {args.audio_field}")
     print(f"Search field: {args.search_field}")
     print("=" * 60)
-    
-    # Check if Anki is running
-    try:
-        anki = AnkiConnector(url=args.anki_url)
-        version = anki.invoke("version")
-        print(f"✓ Connected to AnkiConnect (version: {version})")
-    except Exception as e:
-        print(f"❌ Error: {e}")
-        print("\nMake sure:")
-        print("1. Anki is running")
-        print("2. AnkiConnect add-on is installed (Code: 2055492159)")
-        return 1
     
     # Create audio attacher
     attacher = AudioAttacher(

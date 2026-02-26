@@ -8,11 +8,18 @@ import argparse
 from pathlib import Path
 
 
-def remove_special_chars(input_string):
+def remove_special_chars_for_filename(input_string):
+    """
+    Remove special characters and accents from filename for AllTalk API.
+    
+    Note: This is ONLY for the API call - the actual text sent to TTS
+    keeps accents for proper pronunciation. The final saved filename
+    will have accents restored.
+    """
     # Normalize the string and remove accents
     normalized = unicodedata.normalize("NFD", input_string)
 
-    # Remove non-Latin characters and non-spacing marks
+    # Remove non-Latin characters and non-spacing marks (removes accents)
     cleaned = "".join(
         c for c in normalized if c.isascii() and not unicodedata.combining(c)
     )
@@ -21,6 +28,25 @@ def remove_special_chars(input_string):
     cleaned = re.sub(r"[^\w\s]", "", cleaned)
     cleaned = cleaned.replace(" ", "_")
     return cleaned
+
+
+def clean_filename_keep_accents(input_string):
+    """
+    Clean filename while preserving accent characters.
+    
+    Removes filesystem-problematic characters but keeps accented letters
+    for human readability.
+    """
+    # Remove filesystem-problematic characters: / \ : * ? " < > |
+    cleaned = re.sub(r'[/\\:*?"<>|]', '', input_string)
+    
+    # Replace spaces with underscores
+    cleaned = cleaned.replace(" ", "_")
+    
+    # Remove any remaining control characters or excessive whitespace
+    cleaned = re.sub(r'\s+', '_', cleaned)
+    
+    return cleaned.strip()
 
 
 class GenerateAudio:
@@ -48,7 +74,7 @@ class GenerateAudio:
 
         Args:
             word_language (str): The language of the word.
-            sentence (str): The sentence to generate audio for.
+            sentence (str): The sentence to generate audio for (WITH accents for proper pronunciation).
             audio_backend_url (str, optional): The URL of the audio generation backend. Defaults to None.
             character_voice (str, optional): The voice to use. Defaults to "female_02".
             output_dir (str, optional): Directory to save audio files. Defaults to ".".
@@ -57,33 +83,38 @@ class GenerateAudio:
             str: The file output location of the generated audio.
 
         Examples:
-            >>> request_audio_generation("english", "Hello, world!")
-            './audio/english/Hello.wav'
+            >>> request_audio_generation("es", "después")
+            './después_female_02.wav'
         """
         word_language = word_language.lower()
         if audio_backend_url:
             audio_backend_url = audio_backend_url
         else:
             audio_backend_url = self.all_talk_url
-        # file name needs to be adjusted as it doesn't like the special chars of german
+        
         if not sentence:
             return ()
-        file_name = sentence + f"_{character_voice}"
+        
+        # Create filename-safe version (without accents/special chars)
+        # AllTalk API requires output_file_name to be ASCII-only
+        sentence_for_filename = remove_special_chars_for_filename(sentence)
+        file_name = sentence_for_filename + f"_{character_voice}"
+        
         if len(sentence.split()) > 3:
             file_name = (
-                " ".join(sentence.split()[:3])
-                .translate(str.maketrans("", "", string.punctuation))
-                .replace(" ", "_")
+                " ".join(remove_special_chars_for_filename(sentence).split()[:3])
+                + f"_{character_voice}"
             )
+        
         data = {
-            "text_input": sentence,
+            "text_input": sentence,  # Keep accents for proper pronunciation
             "text_filtering": "standard",
             "character_voice_gen": f"{character_voice}.wav",
             "narrator_enabled": "false",
             "narrator_voice_gen": "male_01.wav",
             "text_not_inside": "character",
             "language": word_language,
-            "output_file_name": f"{file_name}",
+            "output_file_name": f"{file_name}",  # ASCII-only filename
             "output_file_timestamp": "true",
             "autoplay": "false",
             "autoplay_volume": "0.8",
@@ -96,7 +127,11 @@ class GenerateAudio:
             print("Problem with parsing the URL from All Talk")
             return
         return self.retrieve_audio_file(
-            file_url=file_url, language_code=word_language, filename=file_name, output_dir=output_dir
+            file_url=file_url, 
+            language_code=word_language, 
+            filename=file_name, 
+            output_dir=output_dir,
+            original_word=sentence  # Pass original word with accents for final filename
         )
 
     def parse_audio_url(self, response):
@@ -116,7 +151,14 @@ class GenerateAudio:
             print("Problem parsing response from AllTalk Server")
             return None
 
-    def retrieve_audio_file(self, file_url: str, language_code: str, filename: str, output_dir: str = "."):
+    def retrieve_audio_file(
+        self, 
+        file_url: str, 
+        language_code: str, 
+        filename: str, 
+        output_dir: str = ".",
+        original_word: str = None
+    ):
         """
         Description:
             Retrieves an audio file from the specified URL and saves it locally.
@@ -124,15 +166,27 @@ class GenerateAudio:
         Args:
             file_url: The URL of the audio file.
             language_code: The language code associated with the audio file.
-            filename: The desired filename for the downloaded audio file.
+            filename: The ASCII-safe filename used for the API call.
             output_dir: Directory to save the audio file (default: current directory).
+            original_word: The original word with accents (for final filename).
 
         Returns:
             The file path of the downloaded audio file, or None if the download fails.
         """
         response = requests.get(file_url)
         output_path = Path(output_dir)
-        file_output_location = output_path / f"{filename}.wav"
+        
+        # Use original word with accents if provided, otherwise use ASCII filename
+        if original_word:
+            # Clean the original word for filesystem safety while keeping accents
+            cleaned_word = clean_filename_keep_accents(original_word)
+            
+            # Extract voice suffix from filename (e.g., "_female_03")
+            voice_suffix = filename.split('_', 1)[1] if '_' in filename else ""
+            final_filename = f"{cleaned_word}_{voice_suffix}" if voice_suffix else cleaned_word
+            file_output_location = output_path / f"{final_filename}.wav"
+        else:
+            file_output_location = output_path / f"{filename}.wav"
         
         if response.status_code == 200:
             with open(file_output_location, "wb") as file:
@@ -283,9 +337,10 @@ def main():
             print(f"[{i}/{len(words)}] Generating: {word}")
             
             try:
+                # Pass word WITH accents - the method handles filename conversion internally
                 audio_path = audio_ops.request_audio_generation(
                     word_language=args.language,
-                    sentence=remove_special_chars(word),
+                    sentence=word,  # Keep original word with accents
                     character_voice=voice,
                     output_dir=str(output_dir),
                 )
