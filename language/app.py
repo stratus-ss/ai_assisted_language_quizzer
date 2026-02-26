@@ -13,6 +13,12 @@ import contractions
 from dotenv import load_dotenv
 
 
+import sys
+from pathlib import Path
+
+# Add core to Python path
+sys.path.insert(0, str(Path(__file__).parent / "core"))
+
 from modules.FileHandling import HandleFileOperations, GenerateAudio
 from modules.ReviewWords import Quiz
 
