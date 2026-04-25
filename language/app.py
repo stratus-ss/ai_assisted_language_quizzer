@@ -3,7 +3,6 @@ import os
 import yaml
 import string
 import random
-import sys
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 import gradio as gr
@@ -13,14 +12,14 @@ import contractions
 from dotenv import load_dotenv
 
 
-import sys
 from pathlib import Path
+import sys
 
 # Add core to Python path
 sys.path.insert(0, str(Path(__file__).parent / "core"))
 
-from modules.FileHandling import HandleFileOperations, GenerateAudio
-from modules.ReviewWords import Quiz
+from modules.file_handling import HandleFileOperations, GenerateAudio
+from modules.review_words import Quiz
 
 load_dotenv()
 deepl_api = os.getenv("DEEPL_API_KEY")

@@ -8,6 +8,8 @@ An AI-powered language learning tool for extracting vocabulary from subtitles, t
 - 🌍 **DeepL Translation** - Translate word lists automatically
 - 📚 **Anki Integration** - Import cards and add audio files
 - 🎯 **Smart Filtering** - Filter common words and focus on high-frequency vocabulary
+- 🧠 **LLM Curation** - Optional Minimax-powered word quality scoring
+- 🔤 **Lemmatization** - Optional spaCy-based conjugation grouping
 - 🎤 **Audio Generation** - Generate pronunciation audio from All-Talk AI
 
 ## Project Structure
@@ -24,18 +26,30 @@ language/
 ├── audio/                          # Audio generation
 │   └── download_from_alltalk.py    # Download audio files
 ├── core/                           # Core modules
-│   ├── subtitle_analyzer/          # Frequency analysis module
+│   ├── subtitle_analyzer/          # Frequency analysis library
+│   │   ├── __init__.py            # Public API exports
 │   │   ├── config.yaml             # Configuration
-│   │   └── stopwords_spanish.txt   # Words to filter
-│   └── modules/                    # Shared utilities
+│   │   ├── stopwords_spanish.txt   # Words to filter
+│   │   ├── srt_parser.py
+│   │   ├── word_processor.py
+│   │   ├── stopword_manager.py
+│   │   ├── frequency_analyzer.py
+│   │   ├── report_generator.py
+│   │   ├── translator.py
+│   │   ├── lemma_grouper.py       # Optional spaCy lemmatization
+│   │   └── llm_curator.py        # Optional Minimax curation
+│   └── modules/                    # Quiz app utilities
+│       ├── __init__.py
+│       ├── file_handling.py
+│       └── review_words.py
 ├── data/                           # Data files
 │   ├── input/                      # Word lists
 │   ├── output/                     # Generated reports
 │   ├── word_lists/                 # Organized vocabularies
 │   └── images/                     # Image assets
 ├── venv/                           # Virtual environment
-├── app.py                          # Main GUI application
-└── .env                            # Environment variables
+├── app.py                          # Gradio quiz UI
+└── .env                            # API keys (gitignored)
 ```
 
 **Subtitles Directory:**
@@ -71,22 +85,21 @@ Get a free DeepL API key: https://www.deepl.com/pro-api (500,000 characters/mont
 ### 3. Complete Workflow
 
 ```bash
-# All-in-one: Extract vocabulary and translate
-python scripts/subtitle_word_frequency.py --translate
-
-# Or step-by-step:
-# Step 1: Extract vocabulary from subtitles
+# Basic: Extract vocabulary from subtitles
 python scripts/subtitle_word_frequency.py
 
-# Step 2: Translate words to English  
-python scripts/translate_wordlist.py \
-  -i data/output/anki_import_words.txt \
-  -o data/output/translated_words.txt
+# With LLM curation (scores words by learning value):
+python scripts/subtitle_word_frequency.py --curate
 
-# Step 3: Import to Anki (use Anki UI)
+# With translation:
+python scripts/subtitle_word_frequency.py --translate
+
+# All together:
+python scripts/subtitle_word_frequency.py --curate --translate
+
+# Import to Anki:
 # File → Import → data/output/translated_words.txt
-# Field separator: Tab
-# Field 1 → Front, Field 2 → Back
+# Field separator: Tab, Field 1 → Front, Field 2 → Back
 ```
 
 ## Detailed Usage
@@ -129,10 +142,23 @@ python scripts/subtitle_word_frequency.py --remove-stopwords "importante"
 python scripts/subtitle_word_frequency.py --list-stopwords
 ```
 
+**LLM Curation (optional):**
+```bash
+# Requires MINIMAX_API_KEY in language/.env
+python scripts/subtitle_word_frequency.py --curate
+```
+
+**Lemmatization (optional, disabled by default):**
+
+Enable in `core/subtitle_analyzer/config.yaml` under `lemmatization.enabled: true`.
+Requires: `pip install spacy && python -m spacy download es_core_news_sm`
+
 **Configuration:** Edit `core/subtitle_analyzer/config.yaml`
 - `target_words`: Number of words in final list (default: 500)
 - `min_word_length`: Minimum word length (default: 2)
 - `threshold_mode`: "auto" or "manual" frequency filtering
+- `lemmatization.enabled`: Group conjugations under root form (default: false)
+- `llm_curation.enabled`: LLM word scoring (default: false, or use `--curate`)
 - `translation.enabled`: Auto-translate after analysis (default: false)
 - `translation.source_lang`: Source language (default: ES)
 - `translation.target_lang`: Target language (default: EN-US)
@@ -281,6 +307,7 @@ pip install deepl python-dotenv pyyaml
 
 - `core/subtitle_analyzer/README.md` - Detailed frequency analyzer documentation
 - `core/subtitle_analyzer/config.yaml` - Configuration options with comments
+- `docs/curation.md` - LLM curation design, configuration, and performance guide
 - `--help` flag on any script for usage information
 
 ## Contributing

@@ -107,14 +107,14 @@ class GenerateAudio:
             )
         
         data = {
-            "text_input": sentence,  # Keep accents for proper pronunciation
+            "text_input": sentence,
             "text_filtering": "standard",
             "character_voice_gen": f"{character_voice}.wav",
             "narrator_enabled": "false",
             "narrator_voice_gen": "male_01.wav",
             "text_not_inside": "character",
             "language": word_language,
-            "output_file_name": f"{file_name}",  # ASCII-only filename
+            "output_file_name": f"{file_name}",
             "output_file_timestamp": "true",
             "autoplay": "false",
             "autoplay_volume": "0.8",
@@ -337,7 +337,6 @@ def main():
             print(f"[{i}/{len(words)}] Generating: {word}")
             
             try:
-                # Pass word WITH accents - the method handles filename conversion internally
                 audio_path = audio_ops.request_audio_generation(
                     word_language=args.language,
                     sentence=word,  # Keep original word with accents
