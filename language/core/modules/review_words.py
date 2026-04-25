@@ -1,4 +1,4 @@
-from .FileHandling import HandleFileOperations
+from .file_handling import HandleFileOperations
 import random
 
 
