@@ -15,9 +15,10 @@ Usage:
 import argparse
 import sys
 import os
+import traceback
 from pathlib import Path
 import yaml
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 from dotenv import load_dotenv
 
 
@@ -29,8 +30,11 @@ from subtitle_analyzer import (
     WordProcessor,
     StopWordManager,
     FrequencyAnalyzer,
-    ReportGenerator
+    ReportGenerator,
+    LemmaGrouper,
+    LemmaGroup,
 )
+from subtitle_analyzer.llm_curator import LLMCurator, CuratedWord
 from subtitle_analyzer.translator import (
     get_deepl_translator,
     translate_word_list,
@@ -84,9 +88,9 @@ class SubtitleFrequencyAnalyzer:
         """Get default configuration."""
         return {
             'paths': {
-                'subtitles_directory': '../../subtitles',
-                'output_directory': '../output',
-                'stopwords_file': './stopwords_spanish.txt'
+                'subtitles_directory': '../subtitles',
+                'output_directory': './data/output',
+                'stopwords_file': './core/subtitle_analyzer/stopwords_spanish.txt'
             },
             'processing': {
                 'min_word_length': 2,
@@ -98,6 +102,20 @@ class SubtitleFrequencyAnalyzer:
                 'min_frequency': 3,
                 'target_words': 500,
                 'max_results': 1000
+            },
+            'lemmatization': {
+                'enabled': False,
+                'language_model': 'es_core_news_sm',
+                'representative_strategy': 'highest_frequency'
+            },
+            'llm_curation': {
+                'enabled': False,
+                'provider': 'minimax',
+                'model': 'minimax-m2.5',
+                'api_url': 'https://api.minimaxi.chat/v1/text/chatcompletion_v2',
+                'api_key_env': 'MINIMAX_API_KEY',
+                'batch_size': 40,
+                'learner_level': 'A2-B1'
             },
             'output': {
                 'generate_csv': True,
@@ -128,7 +146,7 @@ class SubtitleFrequencyAnalyzer:
         # Stopword manager
         stopwords_file = Path(self.config['paths']['stopwords_file'])
         if not stopwords_file.is_absolute():
-            stopwords_file = language_root / "core" / "subtitle_analyzer" / stopwords_file.name
+            stopwords_file = language_root / stopwords_file
         self.stopword_manager = StopWordManager(stopwords_file)
         
         # Report generator
@@ -136,119 +154,214 @@ class SubtitleFrequencyAnalyzer:
         if not output_dir.is_absolute():
             output_dir = language_root / output_dir
         self.report_generator = ReportGenerator(output_dir)
-    
+
+        # Lemma grouper (optional -- requires spaCy model)
+        self.lemma_grouper = None
+        lemma_config = self.config.get('lemmatization', {})
+        if lemma_config.get('enabled', False):
+            try:
+                self.lemma_grouper = LemmaGrouper(
+                    language_model=lemma_config.get('language_model', 'es_core_news_sm')
+                )
+            except OSError as e:
+                print(f"LemmaGrouper disabled: {e}")
+                self.lemma_grouper = None
+
+        self._curated_words: List[CuratedWord] = []
+        self._sentence_context: Dict[str, str] = {}
+
+    def _parse_subtitles(self, subtitles_dir: Path) -> Dict[str, List[str]]:
+        """Step 1: Parse subtitle files."""
+        file_pattern = self.config.get('advanced', {}).get('file_pattern', '*.srt')
+        return self.parser.parse_directory(subtitles_dir, file_pattern)
+
+    def _process_and_filter(self, parsed_data: Dict[str, List[str]]) -> List[str]:
+        """Steps 2+3: Process words, build sentence context, filter stopwords."""
+        all_words = []
+        for filename, lines in parsed_data.items():
+            for line in lines:
+                words = self.word_processor.process_text(line)
+                for word in words:
+                    if word not in self._sentence_context:
+                        self._sentence_context[word] = line
+                all_words.extend(words)
+        return self.stopword_manager.filter_words(all_words)
+
+    def _apply_lemmatization(self) -> Tuple[Dict[str, LemmaGroup], Dict[str, int]]:
+        """Step 4a: Group words by lemma if enabled. Returns (groups, filtered_frequencies)."""
+        lemma_groups: Dict[str, LemmaGroup] = {}
+        filtered_frequencies: Dict[str, int] = {}
+        if self.lemma_grouper:
+            all_frequencies = self.frequency_analyzer.filter_by_frequency(min_frequency=1)
+            lemma_groups = self.lemma_grouper.group_by_lemma(all_frequencies)
+            lemma_stats = self.lemma_grouper.get_statistics()
+            print(f"  Grouped {lemma_stats['total_surface_forms']} forms into {lemma_stats['unique_lemmas']} lemmas")
+            filtered_frequencies = {
+                lg.representative: lg.total_freq for lg in lemma_groups.values()
+            }
+        return lemma_groups, filtered_frequencies
+
+    def _apply_threshold(
+        self,
+        lemma_groups: Dict[str, LemmaGroup],
+        filtered_frequencies: Dict[str, int]
+    ) -> Tuple[Dict[str, int], Optional[int]]:
+        """Step 5: Apply frequency threshold. Returns (filtered_frequencies, threshold)."""
+        freq_config = self.config.get('frequency', {})
+        threshold: Optional[int] = None
+
+        if lemma_groups:
+            min_freq_val = freq_config.get('min_frequency', 3)
+            if freq_config.get('threshold_mode') == 'manual':
+                threshold = min_freq_val
+            else:
+                target_words = freq_config.get('target_words', 500)
+                sorted_items = sorted(filtered_frequencies.items(), key=lambda x: x[1], reverse=True)
+                threshold = sorted_items[target_words - 1][1] if target_words < len(sorted_items) else 1
+            filtered_frequencies = {k: v for k, v in filtered_frequencies.items() if v >= threshold}
+        else:
+            if freq_config.get('threshold_mode') == 'auto':
+                target_words = freq_config.get('target_words', 500)
+                threshold = self.frequency_analyzer.calculate_smart_threshold(target_words=target_words)
+            else:
+                threshold = freq_config.get('min_frequency', 3)
+            filtered_frequencies = self.frequency_analyzer.filter_by_frequency(min_frequency=threshold)
+            max_results = freq_config.get('max_results', 1000)
+            if len(filtered_frequencies) > max_results:
+                sorted_freqs = sorted(filtered_frequencies.items(), key=lambda x: x[1], reverse=True)
+                filtered_frequencies = dict(sorted_freqs[:max_results])
+
+        return filtered_frequencies, threshold
+
+    def _apply_curation(
+        self,
+        filtered_frequencies: Dict[str, int],
+        lemma_groups: Dict[str, LemmaGroup]
+    ) -> Dict[str, int]:
+        """Step 5a: LLM curation (optional)."""
+        llm_config = self.config.get('llm_curation', {})
+        if not llm_config.get('enabled', False):
+            return filtered_frequencies
+
+        # Build lemma groups from raw frequencies if none exist
+        effective_groups = lemma_groups
+        if not lemma_groups:
+            effective_groups = {
+                word: LemmaGroup(lemma=word, total_freq=freq, forms={word: freq}, representative=word)
+                for word, freq in filtered_frequencies.items()
+            }
+
+        api_key = os.getenv(llm_config.get('api_key_env', 'MINIMAX_API_KEY'))
+        if not api_key:
+            print("  Step 5a skipped: MINIMAX_API_KEY not found in .env")
+            return filtered_frequencies
+
+        print("  Step 5a: Curating word list via LLM...")
+        curator = LLMCurator(
+            api_key=api_key,
+            model=llm_config.get('model', 'minimax-m2.5'),
+            api_url=llm_config.get('api_url', ''),
+            batch_size=llm_config.get('batch_size', 40),
+            learner_level=llm_config.get('learner_level', 'A2-B1')
+        )
+        curated = curator.curate(effective_groups)
+        self._curated_words = [w for w in curated if w.keep]
+        filtered_frequencies = {w.best_form: w.original_freq for w in curated if w.keep}
+        print(f"  LLM kept {len(filtered_frequencies)} of {len(curated)} entries")
+        return filtered_frequencies
+
+    def _generate_reports(
+        self,
+        filtered_frequencies: Dict[str, int],
+        stats: Dict[str, int],
+        source_files: List[str],
+        lemma_groups: Dict[str, LemmaGroup]
+    ) -> Dict[str, Path]:
+        """Step 6: Generate all reports."""
+        reports = self.report_generator.generate_all_reports(
+            filtered_frequencies, stats, source_files, top_n=len(filtered_frequencies)
+        )
+        if lemma_groups:
+            reports['lemma_markdown'] = self.report_generator.generate_lemma_markdown_summary(
+                lemma_groups, stats, source_files, top_n=len(filtered_frequencies)
+            )
+        return reports
+
     def analyze(self, subtitles_dir: Path = None) -> Dict:
         """
         Run the complete analysis pipeline.
-        
+
         Args:
             subtitles_dir: Override subtitles directory from config
-            
+
         Returns:
             Dictionary with analysis results
         """
         print("=" * 70)
         print("SUBTITLE WORD FREQUENCY ANALYZER")
         print("=" * 70)
-        
-        # Determine subtitles directory
+
+        # Resolve subtitles directory relative to language_root
+        language_root = Path(__file__).parent.parent
         if subtitles_dir is None:
             subtitles_dir = Path(self.config['paths']['subtitles_directory'])
             if not subtitles_dir.is_absolute():
-                script_dir = Path(__file__).parent
-                subtitles_dir = script_dir / subtitles_dir
-        
+                subtitles_dir = language_root / subtitles_dir
         subtitles_dir = Path(subtitles_dir)
-        
+
         print(f"\n📁 Subtitles directory: {subtitles_dir}")
         print(f"📝 Stopwords file: {self.stopword_manager.stopwords_file}")
         print(f"💾 Output directory: {self.report_generator.output_dir}\n")
-        
-        # Step 1: Parse subtitle files
+
+        # Step 1
         print("Step 1: Parsing subtitle files...")
         try:
-            file_pattern = self.config.get('advanced', {}).get('file_pattern', '*.srt')
-            parsed_data = self.parser.parse_directory(subtitles_dir, file_pattern)
+            parsed_data = self._parse_subtitles(subtitles_dir)
             print(f"✓ Parsed {len(parsed_data)} files")
         except Exception as e:
             print(f"❌ Error parsing files: {e}")
             return None
-        
-        # Step 2: Process words
+
+        # Steps 2+3
         print("\nStep 2: Processing words...")
-        all_words = []
-        for filename, lines in parsed_data.items():
-            words = self.word_processor.process_lines(lines)
-            all_words.extend(words)
-        
-        print(f"✓ Extracted {len(all_words)} total words")
-        
-        # Step 3: Filter stopwords
-        print("\nStep 3: Filtering stopwords...")
+        filtered_words = self._process_and_filter(parsed_data)
+        print(f"✓ Extracted {len(filtered_words)} total words")
         print(f"  Stopwords loaded: {self.stopword_manager.get_count()}")
-        filtered_words = self.stopword_manager.filter_words(all_words)
-        removed_count = len(all_words) - len(filtered_words)
-        print(f"✓ Filtered out {removed_count} stopwords")
-        print(f"  Remaining words: {len(filtered_words)}")
-        
-        # Step 4: Analyze frequencies
+
+        print("\nStep 3: Filtering stopwords...")
+        print(f"✓ Filtered stopwords, {len(filtered_words)} words remaining")
+
+        # Step 4
         print("\nStep 4: Analyzing word frequencies...")
         self.frequency_analyzer.analyze(filtered_words)
         stats = self.frequency_analyzer.get_statistics()
-        
         print(f"✓ Found {stats['unique_words']} unique words")
-        print(f"  Most common: {stats['most_common_word'][0]} ({stats['most_common_word'][1]}x)")
-        
-        # Step 5: Apply frequency threshold
+
+        # Step 4a
+        lemma_groups: Dict[str, LemmaGroup] = {}
+        filtered_frequencies: Dict[str, int] = {}
+        lemma_groups, filtered_frequencies = self._apply_lemmatization()
+        if lemma_groups:
+            print(f"\nStep 4a: Grouped into {len(lemma_groups)} lemma groups")
+
+        # Step 5
         print("\nStep 5: Applying frequency threshold...")
-        freq_config = self.config.get('frequency', {})
-        
-        if freq_config.get('threshold_mode') == 'auto':
-            target_words = freq_config.get('target_words', 500)
-            threshold = self.frequency_analyzer.calculate_smart_threshold(
-                target_words=target_words
-            )
-            print(f"  Auto-calculated threshold: {threshold}")
-        else:
-            threshold = freq_config.get('min_frequency', 3)
-            print(f"  Manual threshold: {threshold}")
-        
-        filtered_frequencies = self.frequency_analyzer.filter_by_frequency(
-            min_frequency=threshold
-        )
-        
-        # Apply max results limit
-        max_results = freq_config.get('max_results', 1000)
-        if len(filtered_frequencies) > max_results:
-            sorted_freqs = sorted(
-                filtered_frequencies.items(),
-                key=lambda x: x[1],
-                reverse=True
-            )
-            filtered_frequencies = dict(sorted_freqs[:max_results])
-        
-        print(f"✓ {len(filtered_frequencies)} words meet threshold criteria")
-        
-        # Step 6: Generate reports
+        filtered_frequencies, threshold = self._apply_threshold(lemma_groups, filtered_frequencies)
+        print(f"✓ {len(filtered_frequencies)} words meet threshold, threshold={threshold}")
+
+        # Step 5a
+        filtered_frequencies = self._apply_curation(filtered_frequencies, lemma_groups)
+
+        # Step 6
         print("\nStep 6: Generating reports...")
-        output_config = self.config.get('output', {})
-        
         source_files = list(parsed_data.keys())
-        reports = self.report_generator.generate_all_reports(
-            filtered_frequencies,
-            stats,
-            source_files,
-            top_n=len(filtered_frequencies)
-        )
-        
-        print(f"✓ Generated {len(reports)} reports:")
-        for report_type, filepath in reports.items():
-            print(f"  - {report_type}: {filepath}")
-        
+        reports = self._generate_reports(filtered_frequencies, stats, source_files, lemma_groups)
+        print(f"✓ Generated {len(reports)} reports")
+
         print("\n" + "=" * 70)
         print("ANALYSIS COMPLETE!")
         print("=" * 70)
-        
+
         return {
             'frequencies': filtered_frequencies,
             'statistics': stats,
@@ -270,6 +383,54 @@ class SubtitleFrequencyAnalyzer:
         print(f"✓ Removed {count} stopwords")
         print(f"  Total stopwords: {self.stopword_manager.get_count()}")
     
+    def _read_word_list(self, word_list_file: Path) -> List[str]:
+        """Read words from a word list file."""
+        print(f"Reading words from: {word_list_file}")
+        with open(word_list_file, 'r', encoding='utf-8') as f:
+            words = [line.strip() for line in f if line.strip()]
+        print(f"Found {len(words)} words to translate")
+        return words
+
+    def _write_and_report_translations(
+        self,
+        output_file: Path,
+        translations: List[Tuple[str, str]],
+        translator
+    ) -> None:
+        """Write translation file and print API usage summary."""
+        print(f"\nWriting translations to: {output_file}")
+        skipped = 0
+        with open(output_file, 'w', encoding='utf-8') as f:
+            for word, translation in translations:
+                translation = translation.strip() if translation else ""
+                if translation and translation != "[ERROR]":
+                    f.write(f"{word}\t{translation}\n")
+                else:
+                    skipped += 1
+        if skipped:
+            print(f"Skipped {skipped} words with no translation")
+
+        usage = get_api_usage(translator)
+        if usage['character_count'] > 0:
+            print(f"\nDeepL API Usage:")
+            print(f"  Characters used: {usage['character_count']:,}")
+            if usage['character_limit'] > 0:
+                print(f"  Character limit: {usage['character_limit']:,}")
+                print(f"  Usage: {usage['percentage_used']:.1f}%")
+
+        written = sum(1 for _, t in translations if (t.strip() if t else "") and t != "[ERROR]")
+        errors = sum(1 for _, t in translations if t == "[ERROR]")
+        print("\n" + "=" * 70)
+        print("TRANSLATION COMPLETE!")
+        print("=" * 70)
+        print(f"Translated: {written} words")
+        if errors:
+            print(f"Errors: {errors}")
+        if skipped:
+            print(f"Skipped: {skipped} (empty)")
+        print(f"Output: {output_file}")
+        print("=" * 70)
+
     def translate_wordlist(
         self,
         word_list_file: Path,
@@ -277,78 +438,73 @@ class SubtitleFrequencyAnalyzer:
         source_lang: str = "ES",
         target_lang: str = "EN-US"
     ) -> Optional[Path]:
-        """
-        Translate word list using DeepL API.
-        
-        Args:
-            word_list_file: Path to word list file
-            output_file: Path to output translated file
-            source_lang: Source language code
-            target_lang: Target language code
-            
-        Returns:
-            Path to translated file or None if failed
-        """
-        # Get translator
+        """Translate word list using DeepL API."""
         translator = get_deepl_translator()
         if not translator:
-            print("\n⚠️  DeepL API key not found in environment")
-            print("   Translation skipped. Set DEEPL_API_KEY in .env to enable.")
+            print("\nDeepL API key not found in environment")
+            print("Translation skipped. Set DEEPL_API_KEY in .env to enable.")
             return None
-        
+
+        if self._curated_words:
+            return self._write_curated_translations(output_file)
+
+        return self._translate_via_deepl(
+            word_list_file, output_file, source_lang, target_lang, translator
+        )
+
+    def _write_curated_translations(self, output_file: Path) -> Path:
+        """Write LLM-curated translations directly, bypassing DeepL."""
+        print("\n" + "=" * 70)
+        print("WRITING LLM-CURATED TRANSLATIONS")
+        print("=" * 70)
+        print(f"Using {len(self._curated_words)} translations from LLM curation...")
+        skipped = 0
+        with open(output_file, 'w', encoding='utf-8') as f:
+            for cw in self._curated_words:
+                translation = (cw.translation or cw.note or "").strip()
+                if translation:
+                    f.write(f"{cw.best_form}\t{translation}\n")
+                else:
+                    skipped += 1
+        written = len(self._curated_words) - skipped
+        print(f"Wrote {written} translations")
+        if skipped:
+            print(f"Skipped {skipped} words with no translation")
+        print(f"Output: {output_file}")
+        print("=" * 70)
+        return output_file
+
+    def _translate_via_deepl(
+        self,
+        word_list_file: Path,
+        output_file: Path,
+        source_lang: str,
+        target_lang: str,
+        translator
+    ) -> Optional[Path]:
+        """Translate word list via DeepL API."""
         print("\n" + "=" * 70)
         print("TRANSLATING WORD LIST")
         print("=" * 70)
-        
+
         try:
-            # Read words
-            print(f"📖 Reading words from: {word_list_file}")
-            with open(word_list_file, 'r', encoding='utf-8') as f:
-                words = [line.strip() for line in f if line.strip()]
-            
-            print(f"✓ Found {len(words)} words to translate")
-            print(f"🌍 Translating {source_lang} → {target_lang}\n")
-            
-            # Translate using shared module
+            words = self._read_word_list(word_list_file)
+            print(f"Translating {source_lang} -> {target_lang}\n")
+
             translations = translate_word_list(
                 words,
                 translator,
                 target_lang,
                 source_lang,
-                show_progress=True
+                show_progress=True,
+                sentence_context=self._sentence_context
             )
-            
-            # Write output
-            print(f"\n💾 Writing translations to: {output_file}")
-            with open(output_file, 'w', encoding='utf-8') as f:
-                for word, translation in translations:
-                    f.write(f"{word}\t{translation}\n")
-            
-            # Check API usage
-            usage = get_api_usage(translator)
-            if usage['character_count'] > 0:
-                print(f"\n📊 DeepL API Usage:")
-                print(f"  Characters used: {usage['character_count']:,}")
-                if usage['character_limit'] > 0:
-                    print(f"  Character limit: {usage['character_limit']:,}")
-                    print(f"  Usage: {usage['percentage_used']:.1f}%")
-            
-            # Count errors
-            errors = sum(1 for _, t in translations if t == "[ERROR]")
-            
-            print("\n" + "=" * 70)
-            print("TRANSLATION COMPLETE!")
-            print("=" * 70)
-            print(f"✓ Translated: {len(words) - errors} words")
-            if errors:
-                print(f"❌ Errors: {errors}")
-            print(f"📄 Output: {output_file}")
-            print("=" * 70)
-            
+
+            self._write_and_report_translations(output_file, translations, translator)
             return output_file
-            
+
         except Exception as e:
-            print(f"❌ Translation error: {e}")
+            print(f"Translation error: {e}")
             return None
 
 
@@ -426,7 +582,13 @@ Examples:
         action='store_true',
         help='Translate word list after analysis (requires DEEPL_API_KEY in .env)'
     )
-    
+
+    parser.add_argument(
+        '--curate',
+        action='store_true',
+        help='Enable LLM curation of word list (requires MINIMAX_API_KEY in .env)'
+    )
+
     parser.add_argument(
         '--source-lang',
         default=None,
@@ -472,7 +634,10 @@ def main():
         if args.min_freq:
             analyzer.config['frequency']['threshold_mode'] = 'manual'
             analyzer.config['frequency']['min_frequency'] = args.min_freq
-        
+
+        if args.curate:
+            analyzer.config['llm_curation']['enabled'] = True
+
         # Run analysis
         results = analyzer.analyze(subtitles_dir=args.subtitles_dir)
         
@@ -514,7 +679,6 @@ def main():
         return 130
     except Exception as e:
         print(f"\n❌ Error: {e}")
-        import traceback
         traceback.print_exc()
         return 1
 

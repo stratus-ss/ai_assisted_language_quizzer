@@ -5,9 +5,11 @@ Generates various output formats for word frequency analysis results.
 """
 
 from pathlib import Path
-from typing import Dict, List, Tuple, Optional
+from typing import Dict, List, Tuple, Optional, Any
 from datetime import datetime
 import csv
+
+from .lemma_grouper import LemmaGroup
 
 
 class ReportGenerator:
@@ -181,7 +183,67 @@ class ReportGenerator:
                 f.write(f"- Words appearing {bucket}: {count}\n")
         
         return filepath
-    
+
+    def generate_lemma_markdown_summary(
+        self,
+        lemma_groups: Dict[str, LemmaGroup],
+        statistics: Dict[str, Any],
+        sources: List[str],
+        output_file: str = "word_frequency_summary.md",
+        top_n: Optional[int] = None
+    ) -> Path:
+        """
+        Generate markdown summary with lemma grouping details.
+
+        Args:
+            lemma_groups: Dict mapping lemma string -> LemmaGroup.
+            statistics: Analysis statistics.
+            sources: List of source files analyzed.
+            output_file: Output filename.
+            top_n: Number of top lemmas to include (None = all).
+
+        Returns:
+            Path to generated markdown file.
+        """
+        filepath = self.output_dir / output_file
+
+        # Sort lemmas by total frequency (descending)
+        sorted_groups = sorted(
+            lemma_groups.values(),
+            key=lambda g: g.total_freq,
+            reverse=True
+        )
+
+        if top_n:
+            sorted_groups = sorted_groups[:top_n]
+
+        with open(filepath, 'w', encoding='utf-8') as f:
+            f.write("# Word Frequency Analysis Report (Lemma-Grouped)\n\n")
+            f.write(f"**Generated:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n")
+
+            f.write("## 📊 Statistics\n\n")
+            f.write(f"- **Total surface forms analyzed:** {statistics.get('total_words', 0):,}\n")
+            f.write(f"- **Unique lemmas:** {len(lemma_groups):,}\n")
+            f.write(f"- **Average frequency per lemma:** "
+                   f"{statistics.get('avg_frequency', 0):.2f}\n\n")
+
+            f.write(f"## 📝 Lemma Groups ({len(sorted_groups)} groups)\n\n")
+            f.write("| Rank | Lemma | Representative | Total Freq | Forms |\n")
+            f.write("|------|-------|---------------|------------|-------|\n")
+
+            for i, group in enumerate(sorted_groups, 1):
+                forms_str = ", ".join(
+                    f"{form}({freq})" for form, freq in sorted(group.forms.items(), key=lambda x: x[1], reverse=True)
+                )
+                f.write(f"| {i} | {group.lemma} | {group.representative} | "
+                        f"{group.total_freq:,} | {forms_str} |\n")
+
+            f.write(f"\n## 📁 Source Files ({len(sources)})\n\n")
+            for source in sorted(sources):
+                f.write(f"- {source}\n")
+
+        return filepath
+
     def _calculate_distribution(
         self, 
         frequencies: Dict[str, int]

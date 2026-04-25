@@ -7,7 +7,8 @@ Shared by subtitle_word_frequency.py and translate_wordlist.py
 
 import os
 from pathlib import Path
-from typing import Optional, List, Tuple
+from typing import Optional, List, Tuple, Dict
+from .pronoun_context import PronounContextHelper
 
 
 def get_deepl_translator():
@@ -65,7 +66,8 @@ def translate_word_list(
     translator,
     target_lang: str,
     source_lang: Optional[str] = None,
-    show_progress: bool = True
+    show_progress: bool = True,
+    sentence_context: Optional[Dict[str, str]] = None
 ) -> List[Tuple[str, str]]:
     """
     Translate a list of words.
@@ -81,28 +83,31 @@ def translate_word_list(
         List of (original_word, translation) tuples
     """
     translations = []
-    
+    context_helper = PronounContextHelper(source_lang) if source_lang else None
+
     for i, word in enumerate(words, 1):
         if show_progress:
             print(f"[{i}/{len(words)}] {word}", end=" → ")
-        
+
         try:
+            sentence = sentence_context.get(word) if sentence_context else None
+            contextualized = context_helper.contextualize(word, sentence) if context_helper else word
             translation = translate_word(
-                word,
+                contextualized,
                 translator,
                 target_lang,
                 source_lang
             )
             translations.append((word, translation))
-            
+
             if show_progress:
                 print(f"{translation} ✓")
-                
+
         except Exception as e:
             if show_progress:
-                print(f"❌ Error: {e}")
+                print(f"Error: {e}")
             translations.append((word, "[ERROR]"))
-    
+
     return translations
 
 

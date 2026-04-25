@@ -6,14 +6,17 @@
 # =============================================================================
 
 paths:
+  # All paths are relative to the language/ directory.
+  # Use absolute paths (starting with /) to override.
+
   # Directory containing subtitle (.srt) files
-  subtitles_directory: "../../../subtitles"
-  
+  subtitles_directory: "../subtitles"
+
   # Directory where reports will be saved
-  output_directory: "../../data/output"
-  
+  output_directory: "./data/output"
+
   # File containing stopwords (common words to ignore)
-  stopwords_file: "./stopwords_spanish.txt"
+  stopwords_file: "./core/subtitle_analyzer/stopwords_spanish.txt"
 
 # =============================================================================
 # PROCESSING OPTIONS
@@ -22,11 +25,11 @@ paths:
 processing:
   # Minimum word length to consider (shorter words are ignored)
   min_word_length: 2
-  
+
   # Whether to keep accented characters (á, é, í, ó, ú, ñ)
   # Set to true for Spanish, French, Portuguese, etc.
   keep_accents: true
-  
+
   # Convert all words to lowercase for consistency
   lowercase: true
 
@@ -39,17 +42,62 @@ frequency:
   # - "auto": Automatically calculate threshold based on dataset size
   # - "manual": Use the min_frequency value below
   threshold_mode: "auto"
-  
+
   # Minimum frequency for a word to be included (used when threshold_mode is "manual")
   # Words appearing fewer times than this will be excluded
   min_frequency: 3
-  
+
   # Target number of words in final output (used when threshold_mode is "auto")
   # The analyzer will calculate a smart threshold to get approximately this many words
   target_words: 500
-  
+
   # Maximum number of words to include in reports
   max_results: 1000
+
+# =============================================================================
+# LEMMATIZATION OPTIONS
+# =============================================================================
+
+lemmatization:
+  # Enable lemma grouping (groups conjugations under root form)
+  # Requires: pip install spacy && python -m spacy download es_core_news_sm
+  # DISABLED by default -- the pipeline keeps surface (conjugated) forms which
+  # map correctly to English translations. Enable only if you want infinitive-based
+  # grouping for decks where conjugation mismatches are not a concern.
+  enabled: false
+
+  # spaCy language model to use
+  language_model: "es_core_news_sm"
+
+  # Strategy for selecting which form to study:
+  # - "highest_frequency": use the most common surface form
+  representative_strategy: "highest_frequency"
+
+# =============================================================================
+# LLM CURATION OPTIONS
+# =============================================================================
+
+llm_curation:
+  # Enable LLM-based vocabulary curation
+  # Requires MINIMAX_API_KEY in .env
+  # Can be enabled with --curate command-line flag
+  enabled: false
+
+  # LLM provider and model
+  provider: "minimax"
+  model: "MiniMax-M2.7"
+
+  # API endpoint (default for Minimax)
+  api_url: "https://api.minimaxi.chat/v1/text/chatcompletion_v2"
+
+  # Environment variable name containing the API key
+  api_key_env: "MINIMAX_API_KEY"
+
+  # Number of lemma groups per API batch
+  batch_size: 40
+
+  # Target learner level for curation decisions
+  learner_level: "A2-B1"
 
 # =============================================================================
 # OUTPUT CONFIGURATION
@@ -57,15 +105,15 @@ frequency:
 
 output:
   # Which report formats to generate
-  generate_csv: true        # CSV file with word, frequency, percentage
-  generate_markdown: true   # Human-readable summary report
-  generate_anki_list: true  # Simple word list for Anki import
-  
+  generate_csv: true # CSV file with word, frequency, percentage
+  generate_markdown: true # Human-readable summary report
+  generate_anki_list: true # Simple word list for Anki import
+
   # Number of top words to display in markdown summary
   # Set to a number to limit (e.g., 50), or leave as "all" to show all words
   # Note: Currently shows all words that meet the frequency threshold
   markdown_top_n: all
-  
+
   # Include frequency as comment in Anki word list
   # Example: "palabra	# frequency: 42"
   anki_include_frequency: true
@@ -79,15 +127,15 @@ translation:
   # Requires DEEPL_API_KEY in .env file
   # Can be overridden with --translate command-line flag
   enabled: false
-  
+
   # Source language code (language of subtitles)
   # Common codes: ES (Spanish), FR (French), DE (German), IT (Italian), PT (Portuguese)
   source_lang: "ES"
-  
+
   # Target language code (language to translate to)
   # Common codes: EN-US (English US), EN-GB (English UK), DE, FR, ES, IT, PT-BR
   target_lang: "EN-US"
-  
+
   # Output filename for translated words (relative to output_directory)
   output_filename: "translated_words.txt"
 
@@ -98,13 +146,45 @@ translation:
 advanced:
   # File pattern to match in subtitle directory
   file_pattern: "*.srt"
-  
+
   # Encoding to try when reading subtitle files (in order)
   # Most subtitle files use UTF-8, but some may use other encodings
   encodings:
     - "utf-8"
     - "latin-1"
     - "cp1252"
-  
+
   # Show progress information while processing
   verbose: true
+
+# =============================================================================
+# LINGQ IMPORT OPTIONS
+# =============================================================================
+
+lingq_import:
+  # Environment variable name containing the LingQ API key
+  # Get your key from: https://www.lingq.com/en/accounts/apikey/
+  api_key_env: "LINGQ_API_KEY"
+
+  # Default language code for LingQ (two-letter ISO code)
+  # Common codes: es (Spanish), fr (French), de (German), ja (Japanese)
+  default_language: "es"
+
+  # Lesson visibility: "private" or "shared"
+  default_status: "private"
+
+  # Audio file extensions to match with SRT files (same base name)
+  audio_extensions:
+    - ".mp3"
+    - ".m4a"
+    - ".wav"
+    - ".ogg"
+
+  # LingQ API base URL
+  api_base_url: "https://www.lingq.com/api/v3"
+
+  # Test settings for lingq importer validation (added per testing plan per project.mdc Rule 3)
+  # test_course_name: Update to match one of your LingQ courses (used by test harness)
+  test_course_name: "Your Test Course"
+  # test_data_dir: Relative path to normalized test audios for --replace-audio (matches Task 1 copy)
+  test_data_dir: "./data/test_lingq/normalized"
