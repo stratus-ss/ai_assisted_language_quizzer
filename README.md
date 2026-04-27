@@ -305,6 +305,7 @@ pip install deepl python-dotenv pyyaml
 
 ## Documentation
 
+- `CODEFLOW.md` - **Start here** - Comprehensive code flow diagrams and architecture overview
 - `core/subtitle_analyzer/README.md` - Detailed frequency analyzer documentation
 - `core/subtitle_analyzer/config.yaml` - Configuration options with comments
 - `docs/curation.md` - LLM curation design, configuration, and performance guide
