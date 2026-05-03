@@ -9,20 +9,19 @@ This document provides comprehensive code flow diagrams using Mermaid -->help yo
 1. [Subtitle Word Frequency Analysis Pipeline](#1-subtitle-word-frequency-analysis-pipeline)
 2. [Translation Workflow](#2-translation-workflow)
 3. [Anki Integration Flows](#3-anki-integration-flows)
-4. [Gradio Quiz App Flow](#4-gradio-quiz-app-flow)
-5. [Audio Generation Flow](#5-audio-generation-flow)
-
----
-
-## 1. Subtitle Word Frequency Analysis Pipeline
-
+4. [Audio Generation Flow](#4-audio-generation-flow)
+5. [Complete Data Flow Summary](#5-complete-data-flow-summary)
+6. [Key Classes and Responsibilities](#6-key-classes-and-responsibilities)
+7. [Configuration & Environment](#7-configuration--environment)
+8. [Common Workflows](#8-common-workflows)
+9. [Error Handling Summary](#9-error-handling-summary)
 This is the core workflow that extracts vocabulary from subtitle files.
 
 ### 1.1 Main Entry Point Flow
 
 ```mermaid
 flowchart TD
-    A["python scripts/subtitle_word_frequency.py"] --> B["parse_arguments()"]
+    A["PYTHONPATH=src python -m ai_assisted_language_quizzer.scripts.subtitle_word_frequency"] --> B["parse_arguments()"]
     B --> C["SubtitleFrequencyAnalyzer.analyze()"]
     
     B --> D["CLI Arguments"]
@@ -235,7 +234,7 @@ flowchart LR
     
     subgraph Standalone ["Standalone translate_wordlist.py"]
         S1["Called directly by user"]
-        S2["python scripts/translate_wordlist.py"]
+        S2["PYTHONPATH=src python -m ai_assisted_language_quizzer.scripts.translate_wordlist"]
         S3["User-provided word list file"]
     end
     
@@ -251,7 +250,7 @@ flowchart LR
 
 ```mermaid
 flowchart TD
-    A["python anki_tools/add_audio_to_anki.py"] --> B["parse_arguments()"]
+    A["PYTHONPATH=src python -m ai_assisted_language_quizzer.anki_tools.add_audio_to_anki"] --> B["parse_arguments()"]
     
     B --> B1["--audio-dir<br/>--word-list<br/>--deck<br/>--search-field<br/>--audio-field"]
     
@@ -327,106 +326,13 @@ sequenceDiagram
 
 ---
 
-## 4. Gradio Quiz App Flow
+## 4. Audio Generation Flow
 
-### 4.1 App Architecture
-
-```mermaid
-flowchart TD
-    A["app.py main"] --> B["Gradio Blocks UI"]
-    
-    B --> C["Components"]
-    C --> C1["Textbox: new word input"]
-    C --> C2["Dropdown: language selection"]
-    C --> C3["Radio: native language"]
-    C --> C4["Chatbot: quiz interface"]
-    C --> C5["Button: quiz actions"]
-    C --> C6["State: session_id, choices, audio"]
-    
-    B --> D["Middleware"]
-    D --> D1["CookieSetterMiddleware"]
-    D1 --> D2["Session management"]
-    
-    C --> E["Core Functions"]
-    E --> E1["create_new_word()"]
-    E --> E2["quiz()"]
-    E --> E3["check_answer()"]
-    E --> E4["lookup_word()"]
-    E --> E5["play_audio()"]
-```
-
-### 4.2 Word Creation Flow
+### 4.1 Main Audio Generation Flow
 
 ```mermaid
 flowchart TD
-    A["User enters word in textbox"] --> B["create_new_word()"]
-    
-    B --> C["Get language codes"]
-    C --> C1["get_deepl_language_code()"]
-    
-    B --> D["Translate word"]
-    D --> D1["lookup_word(new_word, language_code, native_language_code)"]
-    D1 --> D2["deepl.Translator.translate_text()"]
-    
-    B --> E["Get file path"]
-    E --> E1["return_file_path(session_id, language)"]
-    E1 --> E2["HandleFileOperations()"]
-    
-    B --> F{"generate_audio?"}
-    F -->|Yes| G["GenerateAudio.request_audio_generation()"]
-    F -->|No| H["Skip audio"]
-    G --> G1["POST -->AllTalk API"]
-    G1 --> G2["Save .wav file"]
-    G2 --> G3["audio_path"]
-    
-    B --> I["Build word dict"]
-    I --> I1["{language: {word: {meaning, audio, image, type}}}"]
-    
-    I1 --> J["file_ops.write_file()"]
-```
-
-### 4.3 Quiz Flow
-
-```mermaid
-flowchart TD
-    A["User clicks 'Start Quiz'"] --> B["quiz()"]
-    
-    B --> C["Load word list"]
-    C --> C1["Quiz(filepath)"]
-    C1 --> C2["review_words.Quiz class"]
-    
-    B --> D["Get random word"]
-    D --> D1["quiz.random_word()"]
-    D1 --> D2["Returns: test_word, answer, audio_path, image_path"]
-    
-    B --> E["Generate question"]
-    E --> E1{"Language check"}
-    E1 -->|German| E2["'Welche Bedeutung hat das Wort: ...'"]
-    E1 -->|Spanish| E3["'¿Cual es el significado de la palabra: ...'"]
-    E1 -->|Other| E4["'What is the meaning of the word: ...'"]
-    
-    D2 --> F["Display in chatbot"]
-    
-    F --> G["User types answer"] --> H["check_answer()"]
-    
-    H --> I["Normalize"]
-    I --> I1["contractions.fix()"]
-    I1 --> I2["lowercase"]
-    
-    I2 --> J{"Match?"}
-    J -->|Yes| K["'Correct! 🤗'"]
-    J -->|No| L["'Try again 🥶'"]
-```
-
----
-
-## 5. Audio Generation Flow
-
-### 5.1 Main Audio Generation Flow
-
-```mermaid
-flowchart TD
-    A["python audio/download_from_alltalk.py"] --> B["parse_arguments()"]
+    A["PYTHONPATH=src python -m ai_assisted_language_quizzer.audio.download_from_alltalk"] --> B["parse_arguments()"]
     
     B --> B1["--word-list<br/>--language<br/>--voice<br/>--server<br/>--delay<br/>--output-dir"]
     
@@ -462,7 +368,7 @@ flowchart TD
     I2a --> I2b["'despues.wav' (accent preserved)"]
 ```
 
-### 5.2 Filename Handling Detail
+### 4.2 Filename Handling Detail
 
 ```mermaid
 flowchart TD
@@ -485,7 +391,7 @@ flowchart TD
 
 ---
 
-## 6. Complete Data Flow Summary
+## 5. Complete Data Flow Summary
 
 ```mermaid
 flowchart LR
@@ -536,7 +442,7 @@ flowchart LR
 
 ---
 
-## 7. Key Classes and Responsibilities
+## 6. Key Classes and Responsibilities
 
 ```mermaid
 flowchart TB
@@ -551,12 +457,6 @@ flowchart TB
         SA8["translator<br/>DeepL functions"]
     end
     
-    subgraph app ["app.py"]
-        APP1["create_new_word<br/>Add word with translation"]
-        APP2["check_answer<br/>Validate quiz answers"]
-        APP3["quiz<br/>Generate quiz question"]
-    end
-    
     subgraph anki_tools ["anki_tools/"]
         AN1["AnkiConnector<br/>Connect -->AnkiConnect API"]
         AN2["AudioAttacher<br/>Attach audio files"]
@@ -566,15 +466,11 @@ flowchart TB
         AU1["GenerateAudio<br/>AllTalk TTS API"]
     end
     
-    subgraph modules ["modules/"]
-        M1["HandleFileOperations<br/>Read/write word lists"]
-        M2["Quiz<br/>Quiz logic"]
-    end
-```
+    ```
 
 ---
 
-## 8. Configuration & Environment
+## 7. Configuration & Environment
 
 ```mermaid
 flowchart TD
@@ -610,9 +506,9 @@ flowchart TD
 
 ---
 
-## 9. Common Workflows
+## 8. Common Workflows
 
-### 9.1 Complete Workflow (Recommended)
+### 8.1 Complete Workflow (Recommended)
 
 ```mermaid
 sequenceDiagram
@@ -621,7 +517,7 @@ sequenceDiagram
     participant Anki
     
     User->>CLI: Place .srt files in subtitles/
-    User->>CLI: python scripts/subtitle_word_frequency.py --curate --translate
+    User->>CLI: PYTHONPATH=src python -m ai_assisted_language_quizzer.scripts.subtitle_word_frequency --curate --translate
     CLI->>CLI: Parse subtitles
     CLI->>CLI: Process & filter words
     CLI->>CLI: Lemmatization (optional)
@@ -633,23 +529,23 @@ sequenceDiagram
     User->>Anki: Configure: Basic, Tab-separated
     User->>Anki: Import
     
-    User->>CLI: python anki_tools/add_audio_to_anki.py<br/>-a ./audio -w word_list.txt -d "Deck"
+    User->>CLI: PYTHONPATH=src python -m ai_assisted_language_quizzer.anki_tools.add_audio_to_anki<br/>-a ./audio -w word_list.txt -d "Deck"
     CLI->>Anki: Attach audio via AnkiConnect
 ```
 
-### 9.2 Step-by-Step Workflow
+### 8.2 Step-by-Step Workflow
 
 ```mermaid
 flowchart LR
-    A["1. Extract vocabulary<br/>python scripts/subtitle_word_frequency.py"] --> B["2. Translate<br/>python scripts/translate_wordlist.py"]
-    B --> C["3. Generate audio (optional)<br/>python audio/download_from_alltalk.py"]
+    A["1. Extract vocabulary<br/>PYTHONPATH=src python -m ai_assisted_language_quizzer.scripts.subtitle_word_frequency"] --> B["2. Translate<br/>PYTHONPATH=src python -m ai_assisted_language_quizzer.scripts.translate_wordlist"]
+    B --> C["3. Generate audio (optional)<br/>PYTHONPATH=src python -m ai_assisted_language_quizzer.audio.download_from_alltalk"]
     C --> D["4. Import -->Anki manually"]
-    D --> E["5. Attach audio (optional)<br/>python anki_tools/add_audio_to_anki.py"]
+    D --> E["5. Attach audio (optional)<br/>PYTHONPATH=src python -m ai_assisted_language_quizzer.anki_tools.add_audio_to_anki"]
 ```
 
 ---
 
-## 10. Error Handling Summary
+## 9. Error Handling Summary
 
 ```mermaid
 flowchart TD

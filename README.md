@@ -1,320 +1,247 @@
 # AI Assisted Language Quizzer
 
-An AI-powered language learning tool for extracting vocabulary from subtitles, translating words, and creating Anki flashcards with audio support.
+A language learning tool that analyzes subtitle files (SRT) to build vocabulary lists and generate Anki flashcards with audio support.
 
-## Features
+- [Overview](#overview)
+- [Quick Start](#quick-start)
+- [Scripts](#scripts)
+- [Configuration](#configuration)
+- [Directory Structure](#directory-structure)
+- [Troubleshooting](#troubleshooting)
 
-- 📊 **Subtitle Word Frequency Analyzer** - Extract vocabulary from TV shows and movies
-- 🌍 **DeepL Translation** - Translate word lists automatically
-- 📚 **Anki Integration** - Import cards and add audio files
-- 🎯 **Smart Filtering** - Filter common words and focus on high-frequency vocabulary
-- 🧠 **LLM Curation** - Optional Minimax-powered word quality scoring
-- 🔤 **Lemmatization** - Optional spaCy-based conjugation grouping
-- 🎤 **Audio Generation** - Generate pronunciation audio from All-Talk AI
+---
 
-## Project Structure
+## Overview
 
-```
-language/
-├── scripts/                        # CLI tools
-│   ├── subtitle_word_frequency.py  # Main frequency analyzer
-│   ├── translate_wordlist.py       # Translation script
-│   └── clean_subtitles.py          # Subtitle cleaner
-├── anki_tools/                     # Anki integration
-│   ├── add_audio_to_anki.py        # Add audio to cards
-│   └── add_words_to_anki_notes.py  # Add translations to notes
-├── audio/                          # Audio generation
-│   └── download_from_alltalk.py    # Download audio files
-├── core/                           # Core modules
-│   ├── subtitle_analyzer/          # Frequency analysis library
-│   │   ├── __init__.py            # Public API exports
-│   │   ├── config.yaml             # Configuration
-│   │   ├── stopwords_spanish.txt   # Words to filter
-│   │   ├── srt_parser.py
-│   │   ├── word_processor.py
-│   │   ├── stopword_manager.py
-│   │   ├── frequency_analyzer.py
-│   │   ├── report_generator.py
-│   │   ├── translator.py
-│   │   ├── lemma_grouper.py       # Optional spaCy lemmatization
-│   │   └── llm_curator.py        # Optional Minimax curation
-│   └── modules/                    # Quiz app utilities
-│       ├── __init__.py
-│       ├── file_handling.py
-│       └── review_words.py
-├── data/                           # Data files
-│   ├── input/                      # Word lists
-│   ├── output/                     # Generated reports
-│   ├── word_lists/                 # Organized vocabularies
-│   └── images/                     # Image assets
-├── venv/                           # Virtual environment
-├── app.py                          # Gradio quiz UI
-└── .env                            # API keys (gitignored)
-```
+This tool extracts vocabulary from SRT subtitle files using frequency analysis, lemmatization, and LLM curation to build focused word lists for language learning. Output goes to Anki for spaced-repetition study or LingQ for bulk import.
 
-**Subtitles Directory:**
-- `subtitles/` - Place your .srt subtitle files here
+**Pipeline:** SRT parsing → word processing → stopword filtering → frequency analysis → lemmatization → LLM curation → report generation → Anki/LingQ export → TTS audio
+
+---
 
 ## Quick Start
 
-### 1. Setup
-
 ```bash
-# Clone repository
-git clone https://github.com/your-username/ai-assisted-language-quizzer.git
-cd ai-assisted-language-quizzer
-
-# Create virtual environment
-cd language
+# 1. Create venv and install
 python3 -m venv venv
 source venv/bin/activate
+pip install -e .
+python -m spacy download es_core_news_sm
 
-# Install dependencies
-pip install -r ../requirements.txt
+# 2. Configure API keys
+cp .env.example .env  # then edit with your API keys
+
+# 3. Run word frequency analysis
+PYTHONPATH=src python -m ai_assisted_language_quizzer.scripts.subtitle_word_frequency --subtitles-dir subtitles --stopwords-file stopwords_spanish.txt
 ```
 
-### 2. Configure API Keys
+---
 
-Create `.env` file in `language/` directory:
-```bash
-DEEPL_API_KEY="your-api-key-here"
-```
+## Scripts
 
-Get a free DeepL API key: https://www.deepl.com/pro-api (500,000 characters/month)
+### subtitle_word_frequency.py
 
-### 3. Complete Workflow
-
-```bash
-# Basic: Extract vocabulary from subtitles
-python scripts/subtitle_word_frequency.py
-
-# With LLM curation (scores words by learning value):
-python scripts/subtitle_word_frequency.py --curate
-
-# With translation:
-python scripts/subtitle_word_frequency.py --translate
-
-# All together:
-python scripts/subtitle_word_frequency.py --curate --translate
-
-# Import to Anki:
-# File → Import → data/output/translated_words.txt
-# Field separator: Tab, Field 1 → Front, Field 2 → Back
-```
-
-## Detailed Usage
-
-### Subtitle Frequency Analyzer
-
-**Extract vocabulary from TV shows/movies:**
+Main analysis pipeline. Reads SRT files, extracts words, filters stopwords, generates frequency-sorted vocabulary lists.
 
 ```bash
-cd language
-python scripts/subtitle_word_frequency.py
+# Basic run (uses bundled stopwords from config.yaml)
+PYTHONPATH=src python -m ai_assisted_language_quizzer.scripts.subtitle_word_frequency --subtitles-dir subtitles
+
+# With repo-root stopwords file
+PYTHONPATH=src python -m ai_assisted_language_quizzer.scripts.subtitle_word_frequency --subtitles-dir subtitles --stopwords-file stopwords_spanish.txt
+
+# Add stopwords inline (comma-separated)
+PYTHONPATH=src python -m ai_assisted_language_quizzer.scripts.subtitle_word_frequency --subtitles-dir subtitles --add-stopwords "name1,name2"
+
+# Remove a stopword from the list
+PYTHONPATH=src python -m ai_assisted_language_quizzer.scripts.subtitle_word_frequency --subtitles-dir subtitles --remove-stopwords "word"
+
+# Show current stopwords loaded
+PYTHONPATH=src python -m ai_assisted_language_quizzer.scripts.subtitle_word_frequency --subtitles-dir subtitles --list-stopwords
+
+# LLM curation (requires MINIMAX_API_KEY)
+PYTHONPATH=src python -m ai_assisted_language_quizzer.scripts.subtitle_word_frequency --subtitles-dir subtitles --stopwords-file stopwords_spanish.txt --curate
+
+# DeepL translation (requires DEEPL_API_KEY)
+PYTHONPATH=src python -m ai_assisted_language_quizzer.scripts.subtitle_word_frequency --subtitles-dir subtitles --translate --target-lang EN-US
+
+# Custom minimum frequency threshold
+PYTHONPATH=src python -m ai_assisted_language_quizzer.scripts.subtitle_word_frequency --subtitles-dir subtitles --min-freq 10
+
+# Multi-step: curation + translation
+PYTHONPATH=src python -m ai_assisted_language_quizzer.scripts.subtitle_word_frequency --subtitles-dir subtitles --stopwords-file stopwords_spanish.txt --curate --translate --target-lang DE
 ```
 
-**Output:**
-- `data/output/anki_import_words.txt` - Words sorted by frequency
-- `data/output/word_frequency_report.csv` - Detailed frequency data
-- `data/output/word_frequency_summary.md` - Human-readable report
+**Output files** (written to `data/output/`):
+- `anki_import_words.txt` — tab-separated word list for Anki import
+- `word_frequency_report.csv` — frequency, cumulative %, statistics
+- `word_frequency_summary.md` — ranked vocabulary table
 
-**All-in-one command (analyze + translate):**
-```bash
-# Extract and translate in one step
-python scripts/subtitle_word_frequency.py --translate
+**Key flags:**
+| Flag | Description |
+|------|-------------|
+| `--curate` | Enable LLM curation (needs MINIMAX_API_KEY) |
+| `--translate` | Run DeepL translation on output word list |
+| `--target-lang` | DeepL target language (EN-US, DE, FR, ES, etc.) |
+| `--source-lang` | Source language for analysis (default: ES) |
+| `--subtitles-dir` | Directory containing .srt subtitle files |
+| `--output-dir` | Output directory (default: data/output/) |
+| `--stopwords-file` | Custom stopwords file path |
+| `--add-stopwords` | Comma-separated words to add to stopwords |
+| `--remove-stopwords` | Comma-separated words to remove from stopwords |
+| `--list-stopwords` | Print current stopwords and exit |
+| `--min-freq` | Minimum word frequency threshold |
 
-# Translate to different language (e.g., German)
-python scripts/subtitle_word_frequency.py --translate --target-lang DE
+---
 
-# Specify source language explicitly
-python scripts/subtitle_word_frequency.py --translate --source-lang ES --target-lang EN-US
-```
+### translate_wordlist.py
 
-**Customize stopwords:**
-```bash
-# Add words to ignore (character names, etc.)
-python scripts/subtitle_word_frequency.py --add-stopwords "vin,elfo,lucy"
-
-# Remove words from stopwords
-python scripts/subtitle_word_frequency.py --remove-stopwords "importante"
-
-# List current stopwords
-python scripts/subtitle_word_frequency.py --list-stopwords
-```
-
-**LLM Curation (optional):**
-```bash
-# Requires MINIMAX_API_KEY in language/.env
-python scripts/subtitle_word_frequency.py --curate
-```
-
-**Lemmatization (optional, disabled by default):**
-
-Enable in `core/subtitle_analyzer/config.yaml` under `lemmatization.enabled: true`.
-Requires: `pip install spacy && python -m spacy download es_core_news_sm`
-
-**Configuration:** Edit `core/subtitle_analyzer/config.yaml`
-- `target_words`: Number of words in final list (default: 500)
-- `min_word_length`: Minimum word length (default: 2)
-- `threshold_mode`: "auto" or "manual" frequency filtering
-- `lemmatization.enabled`: Group conjugations under root form (default: false)
-- `llm_curation.enabled`: LLM word scoring (default: false, or use `--curate`)
-- `translation.enabled`: Auto-translate after analysis (default: false)
-- `translation.source_lang`: Source language (default: ES)
-- `translation.target_lang`: Target language (default: EN-US)
-
-### Word Translation
-
-**Translate word lists using DeepL API:**
+Standalone translation script for translating existing word lists via DeepL. Supports deduplication.
 
 ```bash
-source venv/bin/activate
+# Translate an existing word list
+PYTHONPATH=src python -m ai_assisted_language_quizzer.scripts.translate_wordlist -i data/output/anki_import_words.txt -o data/output/translated_words.txt
 
-# Spanish to English (default)
-python scripts/translate_wordlist.py \
-  -i data/output/anki_import_words.txt \
-  -o data/output/translated_words.txt
+# Translate a CSV word list
+PYTHONPATH=src python -m ai_assisted_language_quizzer.scripts.translate_wordlist -i words.txt -o out.txt --format csv
 
-# Check API usage
-python scripts/translate_wordlist.py --check-usage
+# Check DeepL API usage
+PYTHONPATH=src python -m ai_assisted_language_quizzer.scripts.translate_wordlist --check-usage
+
+# Specify source and target languages
+PYTHONPATH=src python -m ai_assisted_language_quizzer.scripts.translate_wordlist -i words.txt -o out.txt --source-lang ES --target-lang DE
 ```
-
-**Output formats:**
-- `--format anki` - Tab-separated (default, Anki-ready)
-- `--format csv` - Comma-separated with header
-- `--format plain` - Human-readable
 
 **Supported languages:**
 - Source: ES, FR, DE, IT, PT, RU, JA, ZH
 - Target: EN-US, EN-GB, DE, FR, ES, IT, PT-BR, RU, JA, ZH
 
-### Anki Import
+**Note:** DeepL free tier: 500,000 characters/month (~50,000 words).
 
-**Import translated words to Anki:**
+---
 
-1. Open Anki → File → Import
-2. Select `data/output/translated_words.txt`
-3. Configure:
-   - Type: **Basic**
-   - Field separator: **Tab**
-   - Field 1 → **Front** (Spanish)
-   - Field 2 → **Back** (English)
-4. Click **Import**
+### lingq_bulk_import.py
 
-**Add audio to Anki cards (optional):**
+Import vocabulary lists into LingQ for spaced-repetition learning.
 
 ```bash
-python anki_tools/add_audio_to_anki.py \
-  -a ./audio_directory \
-  -w data/output/anki_import_words.txt \
-  -d "Your Deck Name" \
-  --search-field "Front" \
-  --audio-field "Front"
+# Import from word list file (uses LINGQ_API_KEY env var)
+PYTHONPATH=src python -m ai_assisted_language_quizzer.scripts.lingq_bulk_import --input data/output/anki_import_words.txt --course-id YOUR_COURSE_ID --title "Spanish Vocabulary"
+
+# With explicit API key
+PYTHONPATH=src python -m ai_assisted_language_quizzer.scripts.lingq_bulk_import --input data/output/anki_import_words.txt --api-key YOUR_API_KEY --course-id YOUR_COURSE_ID --title "Spanish Vocabulary"
 ```
 
-**Prerequisites:**
-- Anki must be running
-- AnkiConnect add-on installed (Code: 2055492159)
+**Note:** Requires LingQ API key (`LINGQ_API_KEY` in .env or `--api-key` flag).
 
-### Audio Generation
+---
 
-**Generate pronunciation audio:**
+### clean_subtitles.py
+
+Clean and normalize .srt subtitle files before analysis. Removes timestamps, indices, and standardizes formatting.
 
 ```bash
-python audio/download_from_alltalk.py \
-  -w data/input/spanish_words.txt \
-  -l es \
-  -v female_03-female_07
+PYTHONPATH=src python -m ai_assisted_language_quizzer.scripts.clean_subtitles --input-dir subtitles --output-dir subtitles_cleaned
 ```
 
-**Requirements:**
-- All-Talk AI server running
-- Update `all_talk_url` in script if needed
+---
 
-## Tips & Best Practices
+## Configuration
 
-### Vocabulary Learning Strategy
+Configuration lives in `src/ai_assisted_language_quizzer/core/subtitle_analyzer/config.yaml`.
 
-1. **Start small:** Import top 50-100 words first
-2. **High-frequency focus:** Words appearing most often give best comprehension boost
-3. **Review stopwords:** Add character names and unwanted words after first run
-4. **Genre-specific:** Different shows = different vocabulary
+**Key sections:**
 
-### Frequency Thresholds
+| Section | Description |
+|---------|-------------|
+| `stopwords:` | Language-specific stopword lists and files |
+| `frequency:` | Min frequency thresholds and threshold mode |
+| `lemmatization:` | spaCy lemmatization settings (requires `python -m spacy download es_core_news_sm`) |
+| `llm_curation:` | LLM curation settings (enable with `--curate` flag, needs MINIMAX_API_KEY) |
+| `translation:` | DeepL translation defaults (needs DEEPL_API_KEY) |
 
-The analyzer uses smart thresholds based on dataset size:
-- **Small dataset (few files):** Lower threshold, more words
-- **Large dataset (many files):** Higher threshold, focus on common words
+**Stopwords file:** The repo root contains `stopwords_spanish.txt` (907 Spanish stopwords). Use `--stopwords-file stopwords_spanish.txt` to reference it, or point to a custom file.
 
-**Manual control:**
-```bash
-# Only words appearing 10+ times
-python scripts/subtitle_word_frequency.py --min-freq 10
+**Secrets** go in `.env` at repo root:
+
+```env
+DEEPL_API_KEY=your_key_here
+MINIMAX_API_KEY=your_key_here
+LINGQ_API_KEY=your_key_here
+ALLTALK_URL=http://localhost:8000
 ```
 
-### API Usage Management
+---
 
-**DeepL Free Tier:** 500,000 characters/month
-- ~410 words ≈ 2,400 characters (0.5% usage)
-- ~50,000 words possible per month
-- Check usage: `python translate_wordlist.py --check-usage`
+## Directory Structure
 
-### Batch Processing
-
-**Process multiple subtitle files:**
-```bash
-# Place all .srt files in subtitles/ directory
-python scripts/subtitle_word_frequency.py
-
-# Analyzer processes all files automatically
-# Results are combined and sorted by frequency
+```
+ai_assisted_language_quizzer/
+├── src/ai_assisted_language_quizzer/
+│   ├── core/
+│   │   ├── subtitle_analyzer/   # SRT parsing, word processing, frequency, reports
+│   │   │   ├── config.yaml      # Tunable parameters
+│   │   │   ├── srt_parser.py
+│   │   │   ├── word_processor.py
+│   │   │   ├── stopword_manager.py
+│   │   │   ├── frequency_analyzer.py
+│   │   │   ├── lemma_grouper.py  # Optional spaCy lemmatization
+│   │   │   ├── llm_curator.py   # Optional Minimax curation
+│   │   │   ├── translator.py    # DeepL translation
+│   │   │   └── report_generator.py
+│   │   └── lingq_import/        # LingQ API client
+│   ├── scripts/                 # CLI entry points
+│   │   ├── subtitle_word_frequency.py
+│   │   ├── translate_wordlist.py
+│   │   ├── lingq_bulk_import.py
+│   │   └── clean_subtitles.py
+│   ├── anki_tools/              # AnkiConnect integration
+│   │   ├── add_words_to_anki_notes.py
+│   │   └── add_audio_to_anki.py
+│   └── audio/                   # AllTalk TTS generation
+│       └── download_from_alltalk.py
+├── data/
+│   ├── input/                   # Source word lists
+│   ├── output/                  # Generated reports, CSVs
+│   ├── audio/                   # TTS audio files from AllTalk
+│   ├── images/                  # Image files for Anki cards
+│   └── word_lists/             # Per-language YAML word lists
+├── subtitles/                  # SRT subtitle files for analysis
+├── stopwords_spanish.txt       # Spanish stopwords (907 words)
+├── .env.example                # API key template
+└── venv/                       # Python virtual environment
 ```
 
-**Import in stages:**
-```bash
-# Top 100 words
-head -100 data/output/anki_import_words.txt > batch1.txt
-python scripts/translate_wordlist.py -i batch1.txt -o translated_batch1.txt
-
-# Next 100 words
-head -200 data/output/anki_import_words.txt | tail -100 > batch2.txt
-python scripts/translate_wordlist.py -i batch2.txt -o translated_batch2.txt
-```
+---
 
 ## Troubleshooting
 
-**"Permission denied: .env"**
+**"No module named spacy"** — Run:
 ```bash
-chmod 600 language/.env
+pip install spacy && python -m spacy download es_core_news_sm
 ```
 
-**"Module not found: deepl"**
+**"Failed to parse SRT"** — Check that subtitle files are valid SRT format (UTF-8 encoded .srt files).
+
+**"Permission denied: .env"** — Run:
 ```bash
-cd language
-source venv/bin/activate
-pip install deepl python-dotenv pyyaml
+chmod 600 .env
 ```
 
-**"No files matching '*.srt' found"**
-- Ensure subtitle files are in `subtitles/` directory
-- Check file extensions are `.srt` (lowercase)
+**AnkiConnect error** — Ensure Anki is running with AnkiConnect add-on installed (Tools → Add-ons → code: 2055492159).
 
-**"AnkiConnect error"**
-- Ensure Anki is running
-- Install AnkiConnect add-on: Tools → Add-ons → Get Add-ons → Code: 2055492159
+**spaCy model missing** — Run:
+```bash
+python -m spacy download es_core_news_sm
+```
+(only needed if `lemmatization.enabled: true` in config.yaml)
+
+---
 
 ## Documentation
 
-- `CODEFLOW.md` - **Start here** - Comprehensive code flow diagrams and architecture overview
-- `core/subtitle_analyzer/README.md` - Detailed frequency analyzer documentation
-- `core/subtitle_analyzer/config.yaml` - Configuration options with comments
-- `docs/curation.md` - LLM curation design, configuration, and performance guide
-- `--help` flag on any script for usage information
+- `CODEFLOW.md` — Comprehensive code flow diagrams (Mermaid)
+- `docs/curation.md` — LLM curation design and configuration
+- `src/ai_assisted_language_quizzer/core/subtitle_analyzer/README.md` — Core library documentation
 
-## Contributing
-
-Contributions are welcome! Please feel free to submit pull requests.
-
-## License
-
-This project is licensed under the [AGPLv3](https://www.gnu.org/licenses/agpl-3.0.en.html)
+Use `--help` on any script for usage information.
