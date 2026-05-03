@@ -1,0 +1,127 @@
+---
+description: "AI Assisted Language Quizzer project rules - Python code style, project structure, and development patterns"
+globs: ["**/*.py", "**/*.yaml", "**/*.yml", "**/*.md"]
+alwaysApply: true
+---
+
+# AI Assisted Language Quizzer Project Rules
+
+## Rule 1: Python Code Style
+
+- Prefer classes over bare functions for any module with state or multi-step logic.
+- Maximum function length: 50 lines (excluding docstrings). Break larger functions into private helpers.
+- Maximum cyclomatic complexity per function: 15.
+- ALL import statements go at the top of the file. Never import inside a function body.
+- Use type hints on all public method signatures.
+- After editing any Python file, verify no imports exist inside function bodies. All imports MUST be at the top of the file -- no exceptions.
+- When adding type hints that reference names from `typing` (e.g., Tuple, Dict, List, Optional, Any, Union), verify those names appear in the file's `from typing import` statement before saving.
+- Use `Path` from `pathlib` instead of raw string paths.
+- Use `python-dotenv` for secrets; never hardcode API keys or URLs.
+
+## Rule 2: Project Structure
+
+The project is organized by workflow under `src/ai_assisted_language_quizzer/`:
+
+```
+src/ai_assisted_language_quizzer/
+├── core/
+│   ├── subtitle_analyzer/ # SRT parsing, word processing, frequency, reports, translation
+│   └── lingq_import/       # LingQ API client
+├── scripts/               # CLI entry points (argparse-based)
+├── anki_tools/            # Anki deck manipulation scripts
+├── audio/                 # TTS generation (AllTalk integration)
+src/ai_assisted_language_quizzer/data/
+├── input/             # Source word lists
+├── output/            # Generated reports, CSVs, Anki imports
+└── word_lists/        # Per-language YAML word lists
+```
+
+Rules:
+- New library classes go in `src/ai_assisted_language_quizzer/core/subtitle_analyzer/` (or a new subpackage under `core/` if unrelated to subtitles).
+- New CLI scripts go in `src/ai_assisted_language_quizzer/scripts/`.
+- Data files (input/output) go in `src/ai_assisted_language_quizzer/data/`.
+- Do not create top-level scripts outside `src/ai_assisted_language_quizzer/`.
+
+## Rule 3: Configuration Pattern
+
+- All tunable parameters belong in `src/ai_assisted_language_quizzer/core/subtitle_analyzer/config.yaml`.
+- Scripts load config via YAML with a `_get_default_config()` fallback.
+- CLI flags override config values; config values override defaults.
+- New features MUST add their config section to `config.yaml` with comments explaining each field.
+
+## Rule 4: Module Pattern
+
+Follow the established single-responsibility class pattern used by existing core modules:
+
+- Each module file contains one primary class (e.g., `srt_parser.py` → `SRTParser`).
+- Classes are exported via `src/ai_assisted_language_quizzer/core/subtitle_analyzer/__init__.py`.
+- Constructor accepts configuration parameters; no global state.
+- Public methods have docstrings with Args/Returns sections.
+- File naming: `snake_case.py` matching the class in `PascalCase`.
+
+Existing classes to reference as patterns:
+- `SRTParser` in `src/ai_assisted_language_quizzer/core/subtitle_analyzer/srt_parser.py`
+- `WordProcessor` in `src/ai_assisted_language_quizzer/core/subtitle_analyzer/word_processor.py`
+- `StopWordManager` in `src/ai_assisted_language_quizzer/core/subtitle_analyzer/stopword_manager.py`
+- `FrequencyAnalyzer` in `src/ai_assisted_language_quizzer/core/subtitle_analyzer/frequency_analyzer.py`
+- `ReportGenerator` in `src/ai_assisted_language_quizzer/core/subtitle_analyzer/report_generator.py`
+
+## Rule 5: Script Entry Point Pattern
+
+Follow the pattern in `src/ai_assisted_language_quizzer/scripts/subtitle_word_frequency.py`:
+
+- A main application class (e.g., `SubtitleFrequencyAnalyzer`) with:
+  - `__init__(self, config_path)` that loads YAML config and initializes components
+  - A primary method (e.g., `analyze()`) with numbered steps and progress output
+- A `parse_arguments()` function returning argparse namespace
+- A `main()` function that wires args → class → execution
+- `if __name__ == "__main__": sys.exit(main())`
+
+## Rule 6: Dependency Management
+
+- Use `requirements.txt` at the project root (pip-based setup).
+- Install dependencies with: `pip install -r requirements.txt`.
+- Document any post-install steps (e.g., model downloads) in comments or README.
+- Do not add dependencies that duplicate existing ones without justification.
+- The project uses a `venv/` virtual environment, not Poetry.
+
+## Rule 7: Secrets and Environment
+
+- API keys and service URLs are stored in `.env` (gitignored).
+- Reference them via `os.getenv()` after `load_dotenv()`.
+- Config YAML stores the env var NAME (e.g., `api_key_env: "MINIMAX_API_KEY"`), never the value.
+- Never commit `.env` contents. Warn if `.env` appears in staged files.
+
+## Rule 8: Output and Reporting
+
+- Generated files go in `data/output/`.
+- CSV reports include headers: `word,frequency,percentage` (or extended as needed).
+- Anki word lists are tab-separated for direct import.
+- Markdown summaries use tables with `| Rank | Word | Frequency | Percentage |` format.
+
+## Rule 9: Readability Over Brevity
+
+- Prefer straightforward solutions over clever one-liners.
+- When multiple approaches exist, choose the one simplest to read and maintain.
+- Avoid premature abstraction. Do not create base classes or factory patterns unless there are 3+ concrete implementations.
+
+## Rule 10: Refactor Before Extend
+
+- If adding functionality to a method would cause it to exceed 50 lines, first refactor the method into smaller helpers in a separate commit/task, then add the new functionality. Do not combine structural refactoring with feature addition.
+- Each extracted helper's return values must be consumed and correct at the call site. Do not return data the helper cannot compute (e.g., statistics before the analyzer has run).
+
+## Rule 11: Pipeline Step Output Discipline
+
+- Optional pipeline steps (lemmatization, LLM curation, translation) must only print their step header when actually executing. When disabled, they must be silent.
+- Required steps always print their header.
+
+## Rule 12: Print Output Ownership
+
+- Each helper method owns its own step header and progress output.
+- The top-level orchestrator (`analyze()`) should only print the pipeline banner, completion message, and final results -- not individual step headers.
+- This keeps helpers self-contained and prevents the orchestrator from growing with every new step.
+
+## Rule 13: Type Hint Consistency
+
+- Never use lowercase `any` in type annotations. Always use `Any` from `typing`.
+- After editing any Python file, verify that all type annotations reference properly imported names (e.g., `Dict[str, Any]` not `Dict[str, any]`).
