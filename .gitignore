@@ -26,6 +26,9 @@ wheels/
 .installed.cfg
 *.egg
 
+# Package build artifacts
+src/ai_assisted_language_quizzer.egg-info/
+
 # Environment variables
 .env
 .env.local
@@ -37,15 +40,39 @@ wheels/
 *.swo
 *~
 
+# Cursor IDE
+.cursor/
+
+# Ruff formatter cache
+.ruff_cache/
+
 # OS
 .DS_Store
 Thumbs.db
 
 # Generated output
 language/data/output/
+data/output/*.txt
+data/output/*.csv
+data/output/*.md
+data/output/*.log
+data/test_lingq/
+data/audio/
 
 # Subtitle corpus (user-specific, large)
 subtitles/
+
+# Dev logs
+devlog/
+
+# Work items/plans
+zed_plans/
+
+# Agent planning instructions
+PLAN_INSTRUCTIONS.md
+
+# Documentation (historical/implementation notes)
+docs/
 
 # Stale root-level directories (if recreated)
 female01/
