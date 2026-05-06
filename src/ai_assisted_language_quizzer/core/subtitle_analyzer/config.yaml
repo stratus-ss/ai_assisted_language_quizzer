@@ -19,6 +19,18 @@ paths:
   stopwords_file: "./core/subtitle_analyzer/stopwords_spanish.txt"
 
 # =============================================================================
+# ENGLISH WORD FILTER
+# =============================================================================
+
+english_filter:
+  # Enable filtering of common English words from output
+  enabled: true
+
+  # File containing English words to filter
+  # Used to remove English loanwords from bilingual subtitle dialog
+  words_file: "./core/subtitle_analyzer/english_words.txt"
+
+# =============================================================================
 # PROCESSING OPTIONS
 # =============================================================================
 
