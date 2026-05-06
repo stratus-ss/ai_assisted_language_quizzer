@@ -31,8 +31,8 @@ python -m spacy download es_core_news_sm
 # 2. Configure API keys
 cp .env.example .env  # then edit with your API keys
 
-# 3. Run word frequency analysis
-PYTHONPATH=src python -m ai_assisted_language_quizzer.scripts.subtitle_word_frequency --subtitles-dir subtitles --stopwords-file stopwords_spanish.txt
+# 3. Run word frequency analysis (stopwords loaded from config.yaml)
+PYTHONPATH=src python -m ai_assisted_language_quizzer.scripts.subtitle_word_frequency --subtitles-dir subtitles
 ```
 
 ---
@@ -47,9 +47,6 @@ Main analysis pipeline. Reads SRT files, extracts words, filters stopwords, gene
 # Basic run (uses bundled stopwords from config.yaml)
 PYTHONPATH=src python -m ai_assisted_language_quizzer.scripts.subtitle_word_frequency --subtitles-dir subtitles
 
-# With repo-root stopwords file
-PYTHONPATH=src python -m ai_assisted_language_quizzer.scripts.subtitle_word_frequency --subtitles-dir subtitles --stopwords-file stopwords_spanish.txt
-
 # Add stopwords inline (comma-separated)
 PYTHONPATH=src python -m ai_assisted_language_quizzer.scripts.subtitle_word_frequency --subtitles-dir subtitles --add-stopwords "name1,name2"
 
@@ -60,7 +57,7 @@ PYTHONPATH=src python -m ai_assisted_language_quizzer.scripts.subtitle_word_freq
 PYTHONPATH=src python -m ai_assisted_language_quizzer.scripts.subtitle_word_frequency --subtitles-dir subtitles --list-stopwords
 
 # LLM curation (requires MINIMAX_API_KEY)
-PYTHONPATH=src python -m ai_assisted_language_quizzer.scripts.subtitle_word_frequency --subtitles-dir subtitles --stopwords-file stopwords_spanish.txt --curate
+PYTHONPATH=src python -m ai_assisted_language_quizzer.scripts.subtitle_word_frequency --subtitles-dir subtitles --curate
 
 # DeepL translation (requires DEEPL_API_KEY)
 PYTHONPATH=src python -m ai_assisted_language_quizzer.scripts.subtitle_word_frequency --subtitles-dir subtitles --translate --target-lang EN-US
@@ -69,7 +66,7 @@ PYTHONPATH=src python -m ai_assisted_language_quizzer.scripts.subtitle_word_freq
 PYTHONPATH=src python -m ai_assisted_language_quizzer.scripts.subtitle_word_frequency --subtitles-dir subtitles --min-freq 10
 
 # Multi-step: curation + translation
-PYTHONPATH=src python -m ai_assisted_language_quizzer.scripts.subtitle_word_frequency --subtitles-dir subtitles --stopwords-file stopwords_spanish.txt --curate --translate --target-lang DE
+PYTHONPATH=src python -m ai_assisted_language_quizzer.scripts.subtitle_word_frequency --subtitles-dir subtitles --curate --translate --target-lang DE
 ```
 
 **Output files** (written to `data/output/`):
@@ -80,17 +77,16 @@ PYTHONPATH=src python -m ai_assisted_language_quizzer.scripts.subtitle_word_freq
 **Key flags:**
 | Flag | Description |
 |------|-------------|
+| `--config`, `-c` | Path to custom config YAML file |
+| `--subtitles-dir`, `-s` | Directory containing .srt subtitle files |
 | `--curate` | Enable LLM curation (needs MINIMAX_API_KEY) |
 | `--translate` | Run DeepL translation on output word list |
 | `--target-lang` | DeepL target language (EN-US, DE, FR, ES, etc.) |
-| `--source-lang` | Source language for analysis (default: ES) |
-| `--subtitles-dir` | Directory containing .srt subtitle files |
-| `--output-dir` | Output directory (default: data/output/) |
-| `--stopwords-file` | Custom stopwords file path |
+| `--source-lang` | Source language for translation (default: ES) |
+| `--min-freq`, `-f` | Minimum word frequency threshold |
 | `--add-stopwords` | Comma-separated words to add to stopwords |
 | `--remove-stopwords` | Comma-separated words to remove from stopwords |
 | `--list-stopwords` | Print current stopwords and exit |
-| `--min-freq` | Minimum word frequency threshold |
 
 ---
 
@@ -109,7 +105,7 @@ PYTHONPATH=src python -m ai_assisted_language_quizzer.scripts.translate_wordlist
 PYTHONPATH=src python -m ai_assisted_language_quizzer.scripts.translate_wordlist --check-usage
 
 # Specify source and target languages
-PYTHONPATH=src python -m ai_assisted_language_quizzer.scripts.translate_wordlist -i words.txt -o out.txt --source-lang ES --target-lang DE
+PYTHONPATH=src python -m ai_assisted_language_quizzer.scripts.translate_wordlist -i words.txt -o out.txt --source ES --target DE
 ```
 
 **Supported languages:**
@@ -122,26 +118,49 @@ PYTHONPATH=src python -m ai_assisted_language_quizzer.scripts.translate_wordlist
 
 ### lingq_bulk_import.py
 
-Import vocabulary lists into LingQ for spaced-repetition learning.
+Bulk-import SRT subtitle files (with optional audio) as LingQ lessons. Scans a directory for `.srt` files, resolves a LingQ course by name, and creates one lesson per subtitle file.
 
 ```bash
-# Import from word list file (uses LINGQ_API_KEY env var)
-PYTHONPATH=src python -m ai_assisted_language_quizzer.scripts.lingq_bulk_import --input data/output/anki_import_words.txt --course-id YOUR_COURSE_ID --title "Spanish Vocabulary"
+# Bulk-import all SRT files from a directory into a LingQ course
+PYTHONPATH=src python -m ai_assisted_language_quizzer.scripts.lingq_bulk_import --dir subtitles --course "Spanish Vocabulary"
 
-# With explicit API key
-PYTHONPATH=src python -m ai_assisted_language_quizzer.scripts.lingq_bulk_import --input data/output/anki_import_words.txt --api-key YOUR_API_KEY --course-id YOUR_COURSE_ID --title "Spanish Vocabulary"
+# Preview without making changes
+PYTHONPATH=src python -m ai_assisted_language_quizzer.scripts.lingq_bulk_import --dir subtitles --course "Spanish Vocabulary" --dry-run
+
+# Import a single SRT file as a lesson (with optional audio)
+PYTHONPATH=src python -m ai_assisted_language_quizzer.scripts.lingq_bulk_import --lesson path/to/episode.srt --audio path/to/episode.mp3 --course "Spanish Vocabulary"
+
+# Replace audio on existing lessons (matches by title)
+PYTHONPATH=src python -m ai_assisted_language_quizzer.scripts.lingq_bulk_import --dir subtitles --course "Spanish Vocabulary" --replace-audio
+
+# Specify language code and skip confirmation prompts
+PYTHONPATH=src python -m ai_assisted_language_quizzer.scripts.lingq_bulk_import --dir subtitles --course "Spanish Vocabulary" --language es --yes
 ```
 
-**Note:** Requires LingQ API key (`LINGQ_API_KEY` in .env or `--api-key` flag).
+**Key flags:**
+| Flag | Description |
+|------|-------------|
+| `--dir`, `-d` | Directory containing .srt (and optional audio) files |
+| `--course`, `-C` | LingQ course name (case-insensitive partial match) |
+| `--lesson`, `-L` | Single .srt file to import (instead of scanning `--dir`) |
+| `--audio`, `-a` | Audio file to attach to a single lesson |
+| `--language`, `-l` | Two-letter LingQ language code (default from config: `es`) |
+| `--config`, `-c` | Path to custom YAML config file |
+| `--dry-run` | Preview what would be uploaded without API calls |
+| `--replace-audio` | Replace audio on existing lessons matched by title |
+| `--yes`, `-y` | Skip all confirmation prompts (for scripting) |
+| `--test` | Run the test harness on test data |
+
+**Note:** Requires LingQ API key (`LINGQ_API_KEY` in `.env`).
 
 ---
 
 ### clean_subtitles.py
 
-Clean and normalize .srt subtitle files before analysis. Removes timestamps, indices, and standardizes formatting.
+Clean and normalize .srt subtitle files before analysis. Removes Amara.org credits and renumbers entries in-place. Operates on the subtitles directory relative to the script location.
 
 ```bash
-PYTHONPATH=src python -m ai_assisted_language_quizzer.scripts.clean_subtitles --input-dir subtitles --output-dir subtitles_cleaned
+PYTHONPATH=src python -m ai_assisted_language_quizzer.scripts.clean_subtitles
 ```
 
 ---
@@ -160,7 +179,7 @@ Configuration lives in `src/ai_assisted_language_quizzer/core/subtitle_analyzer/
 | `llm_curation:` | LLM curation settings (enable with `--curate` flag, needs MINIMAX_API_KEY) |
 | `translation:` | DeepL translation defaults (needs DEEPL_API_KEY) |
 
-**Stopwords file:** The repo root contains `stopwords_spanish.txt` (907 Spanish stopwords). Use `--stopwords-file stopwords_spanish.txt` to reference it, or point to a custom file.
+**Stopwords file:** The default stopwords file is bundled at `src/ai_assisted_language_quizzer/core/subtitle_analyzer/stopwords_spanish.txt` (907 Spanish stopwords). A copy also exists at the repo root. Configure the path via `paths.stopwords_file` in `config.yaml`, or use `--add-stopwords` / `--remove-stopwords` to adjust at runtime.
 
 **Secrets** go in `.env` at repo root:
 
@@ -184,12 +203,16 @@ ai_assisted_language_quizzer/
 │   │   │   ├── srt_parser.py
 │   │   │   ├── word_processor.py
 │   │   │   ├── stopword_manager.py
+│   │   │   ├── stopwords_spanish.txt  # Bundled Spanish stopwords
 │   │   │   ├── frequency_analyzer.py
 │   │   │   ├── lemma_grouper.py  # Optional spaCy lemmatization
 │   │   │   ├── llm_curator.py   # Optional Minimax curation
+│   │   │   ├── pronoun_context.py  # Pronoun context extraction
 │   │   │   ├── translator.py    # DeepL translation
 │   │   │   └── report_generator.py
 │   │   └── lingq_import/        # LingQ API client
+│   │       ├── client.py
+│   │       └── test_harness.py
 │   ├── scripts/                 # CLI entry points
 │   │   ├── subtitle_word_frequency.py
 │   │   ├── translate_wordlist.py
@@ -198,8 +221,9 @@ ai_assisted_language_quizzer/
 │   ├── anki_tools/              # AnkiConnect integration
 │   │   ├── add_words_to_anki_notes.py
 │   │   └── add_audio_to_anki.py
-│   └── audio/                   # AllTalk TTS generation
-│       └── download_from_alltalk.py
+│   ├── audio/                   # AllTalk TTS generation
+│   │   └── download_from_alltalk.py
+│   └── paths.py                 # Project root path helper
 ├── data/
 │   ├── input/                   # Source word lists
 │   ├── output/                  # Generated reports, CSVs
@@ -207,7 +231,7 @@ ai_assisted_language_quizzer/
 │   ├── images/                  # Image files for Anki cards
 │   └── word_lists/             # Per-language YAML word lists
 ├── subtitles/                  # SRT subtitle files for analysis
-├── stopwords_spanish.txt       # Spanish stopwords (907 words)
+├── stopwords_spanish.txt       # Spanish stopwords (907 words, copy)
 ├── .env.example                # API key template
 └── venv/                       # Python virtual environment
 ```

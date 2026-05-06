@@ -235,7 +235,7 @@ In import mode (the default, without `--replace-audio`), the tool:
 1. Scans the directory for `.srt` files
 2. For each SRT, optionally finds a matching audio file (same stem, any extension)
 3. Parses the SRT text
-4. Creates a lesson in the target course via `POST /api/v2/{lang}/lessons/`
+4. Creates a lesson in the target course via `POST /api/v3/{lang}/lessons/import/`
 
 Audio files must share the same stem as their SRT counterpart:
 ```
@@ -251,7 +251,7 @@ If no audio is found, the lesson is created text-only (no audio attached).
 - Scans directory for `.srt` files (import mode) or audio files (replace-audio mode)
 - Matches course by name substring
 - Parses SRT text via `SRTParser` from `subtitle_analyzer`
-- Creates lessons with `POST /api/v2/{lang}/lessons/` or patches audio with `PATCH /api/v2/{lang}/lessons/{id}/`
+- Creates lessons with `POST /api/v3/{lang}/lessons/import/` or patches audio with `PATCH /api/v3/{lang}/lessons/{id}/`
 
 ## Configuration
 
@@ -263,12 +263,12 @@ lingq_import:
   default_language: "es"             # two-letter ISO code
   default_status: "private"          # or "shared"
   audio_extensions: [".mp3", ".m4a", ".wav", ".ogg"]
-  api_base_url: "https://www.lingq.com/api/v2"
+  api_base_url: "https://www.lingq.com/api/v3"
 ```
 
 ## Files
 
-- `src/ai_assisted_language_quizzer/core/lingq_import/client.py` -- `LingQClient` class (API v2 HTTP client)
+- `src/ai_assisted_language_quizzer/core/lingq_import/client.py` -- `LingQClient` class (API v3 HTTP client)
 - `src/ai_assisted_language_quizzer/core/lingq_import/__init__.py` -- Package exports
 - `src/ai_assisted_language_quizzer/core/lingq_import/test_harness.py` -- `LingQTestHarness` for API validation
 - `lingq-bulk-import` -- CLI entry point
