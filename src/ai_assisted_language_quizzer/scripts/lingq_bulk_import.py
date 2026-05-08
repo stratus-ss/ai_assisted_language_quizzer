@@ -10,17 +10,17 @@ import argparse
 import os
 import re
 import sys
+import time
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Union
 
 import yaml
 from dotenv import load_dotenv
 
-
 from ai_assisted_language_quizzer.core.lingq_import import Lesson, LingQClient
 from ai_assisted_language_quizzer.core.lingq_import.test_harness import LingQTestHarness
-from ai_assisted_language_quizzer.paths import PROJECT_ROOT
 from ai_assisted_language_quizzer.core.subtitle_analyzer import SRTParser
+from ai_assisted_language_quizzer.paths import PROJECT_ROOT
 
 load_dotenv()
 
@@ -79,7 +79,9 @@ class LingQBulkImporter:
                 "audio_extensions": [".mp3", ".m4a", ".wav", ".ogg"],
                 "api_base_url": "https://www.lingq.com/api/v3",
                 "test_course_name": "Your Test Course",
-                "test_data_dir": str(PROJECT_ROOT / "data" / "test_lingq" / "normalized"),
+                "test_data_dir": str(
+                    PROJECT_ROOT / "data" / "test_lingq" / "normalized"
+                ),
             }
         }
 
@@ -486,6 +488,8 @@ class LingQBulkImporter:
                 client, audio_path, lesson.pk, resolved_lang, dry_run
             )
             summary[outcome] += 1
+            if not dry_run:
+                time.sleep(5)
 
         if unmatched:
             print(f"\nWarning: {len(unmatched)} audio file(s) had no matching lesson.")
@@ -574,6 +578,8 @@ class LingQBulkImporter:
                 dry_run,
             )
             summary[outcome] += 1
+            if not dry_run:
+                time.sleep(5)
         return summary
 
     def _import_single_lesson(
